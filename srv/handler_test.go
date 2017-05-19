@@ -50,7 +50,11 @@ func TestRedirectToLatest(t *testing.T) {
 	)
 
 	// no versions available
-	assertNotFound(t, srv, "http://proj2.foo.bar/latest/")
+	assertRedirect(
+		t, srv,
+		"http://proj2.foo.bar/latest/",
+		"/404.html",
+	)
 }
 
 func TestProjectNameFromReq(t *testing.T) {

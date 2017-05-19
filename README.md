@@ -55,6 +55,7 @@ docker run -p 9090:9090 --name docsrv-instance \
         -e GITHUB_ORG "your github org/user name" \
         -e SHARED_REPO "(optional) url of the the repo" \
         -v /path/to/host/logs:/var/log/docsrv \
+        -v /path/to/error/pages:/var/www/public/errors \
         docsrv
 ```
 
@@ -62,3 +63,4 @@ docker run -p 9090:9090 --name docsrv-instance \
 
 * `SHARED_REPO` will be downloaded at the start of the container. It can be used to download a repo that will contain files needed by the docs to be built.
 * If not `GITHUB_API_KEY` is provided, the requests will not be authenticated. That means harder rate limits and unability to fetch private repositories.
+* To override the error pages, mount a volume on `/var/www/public/errors` with `404.html` and `500.html`. If any of these two files does not exist, they will be created when the container starts. You may use assets contained in the same errors folder as if they were on the root of the site.

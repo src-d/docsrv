@@ -2,13 +2,16 @@ package srv
 
 import (
 	"context"
-	"fmt"
+	"errors"
+	"net/http"
 	"sort"
 
 	"github.com/Masterminds/semver"
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
 )
+
+var ErrNotFound = errors.New("unable to find a release")
 
 // Release represents a project release with a tag name and an URL to the
 // documentation asset.
@@ -85,13 +88,16 @@ func (g *gitHub) Releases(project string, all bool) ([]*Release, error) {
 }
 
 func (g *gitHub) Release(project, tag string) (*Release, error) {
-	release, _, err := g.client.Repositories.GetReleaseByTag(
+	release, resp, err := g.client.Repositories.GetReleaseByTag(
 		context.Background(),
 		g.org,
 		project,
 		tag,
 	)
-	if err != nil {
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrNotFound
+	} else if err != nil {
 		return nil, err
 	}
 
@@ -99,7 +105,7 @@ func (g *gitHub) Release(project, tag string) (*Release, error) {
 		return r, nil
 	}
 
-	return nil, fmt.Errorf("can't find a release %s on project %s", tag, project)
+	return nil, ErrNotFound
 }
 
 func toRelease(r *github.RepositoryRelease) *Release {

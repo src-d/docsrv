@@ -4,6 +4,11 @@
 
         ext .html
 
+        errors {
+                404 errors/404.html
+                * errors/500.html
+        }
+
         rewrite / { 
                 if {path} is /versions.json
                 to /proxy{path}
@@ -16,7 +21,7 @@
 
         rewrite / {
                 if {path} not /versions.json
-                to {hostonly}{path} {hostonly}{path}/ /proxy{path}
+                to {hostonly}{path} {hostonly}{path}/ errors/{path} /proxy{path}
         }
 
         proxy /proxy 127.0.0.1:9091 {
