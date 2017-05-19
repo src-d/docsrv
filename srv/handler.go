@@ -1,6 +1,7 @@
 package srv
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -29,6 +30,13 @@ type DocSrv struct {
 	latestVersions map[string]latestVersion
 	installMut     *sync.RWMutex
 	installed      map[string]struct{}
+	versionMut     *sync.RWMutex
+	versions       map[string][]*version
+}
+
+type version struct {
+	Text string `json:"text"`
+	URL  string `json:"url"`
 }
 
 // latestVersion is a version name with the time it was inserted in the cache.
@@ -48,6 +56,8 @@ func NewDocSrv(apiKey, org string) *DocSrv {
 		make(map[string]latestVersion),
 		new(sync.RWMutex),
 		make(map[string]struct{}),
+		new(sync.RWMutex),
+		make(map[string][]*version),
 	}
 }
 
@@ -101,14 +111,71 @@ func (s *DocSrv) install(project, version string) {
 	s.installed[path] = struct{}{}
 }
 
+func (s *DocSrv) projectVersions(project string) []*version {
+	s.versionMut.Lock()
+	defer s.versionMut.Unlock()
+	return s.versions[project]
+}
+
+func (s *DocSrv) refreshProjectVersions(req *http.Request, project string) error {
+	releases, err := s.github.Releases(project, true)
+	if err != nil {
+		return err
+	}
+
+	versions := []*version{}
+	for _, r := range releases {
+		versions = append(versions, &version{
+			Text: r.Tag,
+			URL:  urlFor(req, r.Tag, ""),
+		})
+	}
+
+	s.versionMut.Lock()
+	defer s.versionMut.Unlock()
+
+	s.versions[project] = versions
+	return nil
+}
+
 func (s *DocSrv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer recoverFromPanic(w, r)
 
-	if strings.HasPrefix(r.URL.Path, "/latest/") {
+	if r.URL.Path == "/versions.json" {
+		s.listVersions(w, r)
+	} else if strings.HasPrefix(r.URL.Path, "/latest/") {
 		s.redirectToLatest(w, r)
 	} else {
 		s.prepareVersion(w, r)
 	}
+}
+
+func (s *DocSrv) listVersions(w http.ResponseWriter, r *http.Request) {
+	project := projectNameFromReq(r)
+	versions := s.projectVersions(project)
+	log := logrus.WithField("project", project)
+
+	// if versions is nil, project versions haven't been refreshed yet
+	// so refresh them and then serve them
+	if versions == nil {
+		if err := s.refreshProjectVersions(r, project); err != nil {
+			log.Errorf("error refreshing project versions: %s", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		versions = s.projectVersions(project)
+	}
+
+	data, err := json.Marshal(versions)
+	if err != nil {
+		log.Errorf("error serving project versions: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
 }
 
 func (s *DocSrv) redirectToLatest(w http.ResponseWriter, r *http.Request) {
@@ -120,7 +187,7 @@ func (s *DocSrv) redirectToLatest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	releases, err := s.github.Releases(project)
+	releases, err := s.github.Releases(project, false)
 	if err != nil {
 		log.Errorf("could not find releases for project: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -128,7 +195,7 @@ func (s *DocSrv) redirectToLatest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(releases) == 0 {
-		log.Warnf("no releases found for project: %s", err)
+		log.Warn("no releases found for project")
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -156,6 +223,15 @@ func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if !s.isInstalled(project, version) {
+		var done = make(chan struct{}, 0)
+		go func() {
+			if err := s.refreshProjectVersions(r, project); err != nil {
+				log.Error(err.Error())
+			}
+
+			close(done)
+		}()
+
 		release, err := s.github.Release(project, version)
 		if err != nil {
 			log.Errorf("could not find release for project: %s", err)
@@ -179,6 +255,7 @@ func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		<-done
 		s.install(project, version)
 	}
 
@@ -246,6 +323,9 @@ func reqScheme(r *http.Request) string {
 	scheme := r.URL.Scheme
 	if scheme == "" {
 		scheme = r.Header.Get("X-Forwarded-Proto")
+		if scheme == "" {
+			scheme = "http"
+		}
 	}
 	return scheme
 }

@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -117,6 +118,8 @@ func TestPrepareVersion(t *testing.T) {
 
 	github.add("foo", "v1.0.0", url)
 
+	require.Len(srv.versions["foo"], 0)
+
 	assertRedirect(
 		t, srv,
 		"http://foo.bar.baz/v1.0.0/something",
@@ -127,6 +130,35 @@ func TestPrepareVersion(t *testing.T) {
 		filepath.Join(tmpDir, "foo.bar.baz", "v1.0.0"),
 		"http://foo.bar.baz/v1.0.0",
 	)
+
+	require.Len(srv.versions["foo"], 1)
+}
+
+func TestListVersions(t *testing.T) {
+	github := newGitHubMock()
+	srv := newTestSrv(github)
+	github.add("foo", "v1.0.0", "")
+	github.add("foo", "v1.1.0", "")
+	github.add("foo", "v1.2.0", "")
+	github.add("bar", "v1.3.0", "")
+
+	assertJSON(t, srv, "http://foo.bar.baz/versions.json", []*version{
+		{"v1.0.0", "http://foo.bar.baz/v1.0.0"},
+		{"v1.1.0", "http://foo.bar.baz/v1.1.0"},
+		{"v1.2.0", "http://foo.bar.baz/v1.2.0"},
+	})
+}
+
+func assertJSON(t *testing.T, handler http.Handler, requestURL string, expected interface{}) {
+	w := httptest.NewRecorder()
+	req, err := http.NewRequest("GET", requestURL, nil)
+	require.NoError(t, err, "unexpected error creating request")
+
+	handler.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	expectedJSON, err := json.Marshal(expected)
+	require.NoError(t, err, "unexpected error marshaling json")
+	require.Equal(t, string(expectedJSON), w.Body.String())
 }
 
 func assertMakefileOutput(t *testing.T, tmpDir, baseURL string) {
@@ -181,7 +213,7 @@ func (m *gitHubMock) add(project, version, url string) {
 	m.releases[project][version] = url
 }
 
-func (m *gitHubMock) Releases(project string) ([]*Release, error) {
+func (m *gitHubMock) Releases(project string, all bool) ([]*Release, error) {
 	if proj, ok := m.releases[project]; ok {
 		var releases []*Release
 		for v, url := range proj {
@@ -218,6 +250,8 @@ func newTestSrv(github GitHub) *DocSrv {
 		make(map[string]latestVersion),
 		new(sync.RWMutex),
 		make(map[string]struct{}),
+		new(sync.RWMutex),
+		make(map[string][]*version),
 	}
 }
 

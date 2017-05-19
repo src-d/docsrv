@@ -23,7 +23,8 @@ type Release struct {
 type GitHub interface {
 	// Releases returns the latest 100 releases of a project that contain a
 	// "docs.tar.gz" asset.
-	Releases(project string) ([]*Release, error)
+	// If `all` is true, all releases will be fetch.
+	Releases(project string, all bool) ([]*Release, error)
 	// Release returns the requested release of a project that contains a
 	// "docs.tar.gz" asset.
 	Release(project, tag string) (*Release, error)
@@ -50,25 +51,33 @@ func NewGitHub(apiKey, org string) GitHub {
 	return &gitHub{apiKey, org, client}
 }
 
-func (g *gitHub) Releases(project string) ([]*Release, error) {
-	releases, _, err := g.client.Repositories.ListReleases(
-		context.Background(),
-		g.org,
-		project,
-		&github.ListOptions{PerPage: 100},
-	)
+func (g *gitHub) Releases(project string, all bool) ([]*Release, error) {
+	var result []*Release
+	page := 1
+	for {
+		releases, resp, err := g.client.Repositories.ListReleases(
+			context.Background(),
+			g.org,
+			project,
+			&github.ListOptions{Page: page, PerPage: 100},
+		)
 
-	if err != nil {
-		return nil, err
-	}
-
-	var result = make([]*Release, 0, len(releases))
-	for _, r := range releases {
-		release := toRelease(r)
-		if release == nil {
-			continue
+		if err != nil {
+			return nil, err
 		}
-		result = append(result, release)
+
+		for _, r := range releases {
+			release := toRelease(r)
+			if release == nil {
+				continue
+			}
+			result = append(result, release)
+		}
+
+		if !all || resp.NextPage == 0 {
+			break
+		}
+		page = resp.NextPage
 	}
 
 	sort.Sort(byTag(result))
