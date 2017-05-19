@@ -59,7 +59,7 @@ func (s *DocSrv) setLatestVersion(project, version string) {
 	s.latestVersions[project] = latestVersion{time.Now(), version}
 }
 
-// latestVersion will return the latest version of a project and ra boolean
+// latestVersion will return the latest version of a project and a boolean
 // reporting whether or not that version exists.
 // If the version is expired, it will return false.
 func (s *DocSrv) latestVersion(project string) (string, bool) {
