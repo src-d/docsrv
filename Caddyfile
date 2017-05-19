@@ -1,0 +1,23 @@
+0.0.0.0:9090 {
+        root /var/www/public
+        log stdout
+
+        ext .html
+
+        rewrite / {
+                if {path} is /
+                to /proxy/latest/
+        }
+
+        rewrite / {
+                to {hostonly}{path} {hostonly}{path}/ /proxy{path}
+        }
+
+        proxy /proxy 127.0.0.1:9091 {
+                without /proxy
+                header_upstream Host {host}
+                header_upstream X-Real-IP {remote}
+                header_upstream X-Forwarded-For {remote}
+                header_upstream X-Forwarded-Proto {scheme}
+        }
+}
