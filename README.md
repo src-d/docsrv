@@ -12,10 +12,26 @@ This serves very specific needs, you probably just want to build your docs and p
 To access a documentation for a project, you will have to visit an URL with the following structure.
 
 ```
-http://{github project name}.yourdomain.tld/{version or latest}/{path}
+http(s)://{github project name}.yourdomain.tld/{version or latest}/{path}
 ```
 
 The project name is taken from the subdomain of the host. (If you have more than one, let's say `foo.bar.domain.tld`, only `foo` will be used as project).
+
+### Access list of versions for a project
+
+```
+http(s)://{github project name}.yourdomain.tld/versions.json
+```
+
+Will output something like this:
+
+```json
+[
+        {"text": "v1.0.0", "url": "http://project.mydomain.tld/v1.0.0"},
+        {"text": "v1.1.0", "url": "http://project.mydomain.tld/v1.1.0"},
+]
+```
+
 
 ### Release format
 

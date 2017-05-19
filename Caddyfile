@@ -4,12 +4,18 @@
 
         ext .html
 
+        rewrite / { 
+                if {path} is /versions.json
+                to /proxy{path}
+        }
+
         rewrite / {
                 if {path} is /
                 to /proxy/latest/
         }
 
         rewrite / {
+                if {path} not /versions.json
                 to {hostonly}{path} {hostonly}{path}/ /proxy{path}
         }
 

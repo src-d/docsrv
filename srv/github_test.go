@@ -10,7 +10,7 @@ func TestReleases(t *testing.T) {
 	require := require.New(t)
 	github := NewGitHub("", "erizocosmico")
 
-	releases, err := github.Releases("test-docsrv")
+	releases, err := github.Releases("test-docsrv", true)
 	require.NoError(err)
 
 	expected := []string{"v1.2.0", "v1.4.0"}
