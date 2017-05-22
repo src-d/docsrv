@@ -6,14 +6,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestReleases(t *testing.T) {
+func TestGitHubReleases(t *testing.T) {
 	require := require.New(t)
 	github := NewGitHub("", "erizocosmico")
 
-	releases, err := github.Releases("test-docsrv", true)
+	releases, err := github.Releases("test-docsrv")
 	require.NoError(err)
 
-	expected := []string{"v1.2.0", "v1.4.0"}
+	expected := []string{"v1.0.0", "v1.4.0", "v1.5.0"}
 	var result []string
 	for _, r := range releases {
 		result = append(result, r.Tag)
@@ -22,7 +22,7 @@ func TestReleases(t *testing.T) {
 	require.Equal(expected, result)
 }
 
-func TestRelease(t *testing.T) {
+func TestGitHubRelease(t *testing.T) {
 	require := require.New(t)
 	github := NewGitHub("", "erizocosmico")
 
@@ -32,4 +32,13 @@ func TestRelease(t *testing.T) {
 	release, err = github.Release("test-docsrv", "v1.4.0")
 	require.NoError(err)
 	require.Equal("v1.4.0", release.Tag)
+}
+
+func TestGitHubLatest(t *testing.T) {
+	require := require.New(t)
+	github := NewGitHub("", "erizocosmico")
+
+	release, err := github.Latest("test-docsrv")
+	require.NoError(err)
+	require.Equal("v1.5.0", release.Tag)
 }

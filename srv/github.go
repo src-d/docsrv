@@ -18,19 +18,18 @@ var ErrNotFound = errors.New("unable to find a release")
 type Release struct {
 	// Tag of the release.
 	Tag string
-	// Docs is the URL to the .tar.gz file with the documentation.
-	Docs string
+	// URL is the URL to the .tar.gz file with the repo files.
+	URL string
 }
 
 // GitHub is a service to retrieve information from GitHub.
 type GitHub interface {
-	// Releases returns the latest 100 releases of a project that contain a
-	// "docs.tar.gz" asset.
-	// If `all` is true, all releases will be fetch.
-	Releases(project string, all bool) ([]*Release, error)
-	// Release returns the requested release of a project that contains a
-	// "docs.tar.gz" asset.
+	// Releases returns all the releases for a project.
+	Releases(project string) ([]*Release, error)
+	// Release returns the requested release of a project.
 	Release(project, tag string) (*Release, error)
+	// Latest returns the latest non-draft, non-prerelease release of a project.
+	Latest(project string) (*Release, error)
 }
 
 type gitHub struct {
@@ -54,7 +53,21 @@ func NewGitHub(apiKey, org string) GitHub {
 	return &gitHub{apiKey, org, client}
 }
 
-func (g *gitHub) Releases(project string, all bool) ([]*Release, error) {
+func (g *gitHub) Latest(project string) (*Release, error) {
+	release, resp, err := g.client.Repositories.GetLatestRelease(context.Background(), g.org, project)
+
+	// to the go-github, a 404 is an error, but we differentiate between a 404
+	// and a 500
+	if r := newRelease(release); r == nil || resp.StatusCode == http.StatusNotFound {
+		return nil, ErrNotFound
+	} else if err != nil {
+		return nil, err
+	} else {
+		return r, nil
+	}
+}
+
+func (g *gitHub) Releases(project string) ([]*Release, error) {
 	var result []*Release
 	page := 1
 	for {
@@ -70,14 +83,14 @@ func (g *gitHub) Releases(project string, all bool) ([]*Release, error) {
 		}
 
 		for _, r := range releases {
-			release := toRelease(r)
+			release := newRelease(r)
 			if release == nil {
 				continue
 			}
 			result = append(result, release)
 		}
 
-		if !all || resp.NextPage == 0 {
+		if resp.NextPage == 0 {
 			break
 		}
 		page = resp.NextPage
@@ -95,39 +108,25 @@ func (g *gitHub) Release(project, tag string) (*Release, error) {
 		tag,
 	)
 
-	if resp.StatusCode == http.StatusNotFound {
+	// to the go-github, a 404 is an error, but we differentiate between a 404
+	// and a 500
+	if r := newRelease(release); r == nil || resp.StatusCode == http.StatusNotFound {
 		return nil, ErrNotFound
 	} else if err != nil {
 		return nil, err
-	}
-
-	if r := toRelease(release); r != nil {
+	} else {
 		return r, nil
 	}
-
-	return nil, ErrNotFound
 }
 
-func toRelease(r *github.RepositoryRelease) *Release {
-	if maybeBool(r.Draft) || maybeBool(r.Prerelease) {
-		return nil
-	}
-
-	var docsURL string
-	for _, a := range r.Assets {
-		if maybeStr(a.Name) == "docs.tar.gz" {
-			docsURL = maybeStr(a.BrowserDownloadURL)
-			break
-		}
-	}
-
-	if docsURL == "" {
+func newRelease(r *github.RepositoryRelease) *Release {
+	if r == nil || maybeBool(r.Draft) || maybeBool(r.Prerelease) {
 		return nil
 	}
 
 	return &Release{
-		Tag:  maybeStr(r.TagName),
-		Docs: docsURL,
+		Tag: maybeStr(r.TagName),
+		URL: maybeStr(r.TarballURL),
 	}
 }
 

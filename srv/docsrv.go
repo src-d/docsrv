@@ -13,15 +13,14 @@ import (
 	"github.com/Sirupsen/logrus"
 )
 
-var sharedRepo = os.Getenv("SHARED_REPO") != ""
-
 const (
-	sharedFolder      = "/etc/shared"
-	defaultBaseFolder = "/var/www/public"
+	defaultSharedFolder = "/etc/shared"
+	defaultBaseFolder   = "/var/www/public"
 )
 
 type DocSrv struct {
 	baseFolder     string
+	sharedFolder   string
 	github         GitHub
 	mut            *sync.RWMutex
 	latestVersions map[string]latestVersion
@@ -48,6 +47,7 @@ const latestVersionLifetime = 1 * time.Hour
 func NewDocSrv(apiKey, org string) *DocSrv {
 	return &DocSrv{
 		defaultBaseFolder,
+		defaultSharedFolder,
 		NewGitHub(apiKey, org),
 		new(sync.RWMutex),
 		make(map[string]latestVersion),
@@ -115,7 +115,7 @@ func (s *DocSrv) projectVersions(project string) []*version {
 }
 
 func (s *DocSrv) refreshProjectVersions(req *http.Request, project string) error {
-	releases, err := s.github.Releases(project, true)
+	releases, err := s.github.Releases(project)
 	if err != nil {
 		return err
 	}
@@ -184,20 +184,17 @@ func (s *DocSrv) redirectToLatest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	releases, err := s.github.Releases(project, false)
-	if err != nil {
-		log.Errorf("could not find releases for project: %s", err)
+	latest, err := s.github.Latest(project)
+	if err == ErrNotFound {
+		log.Warn("no releases found for project")
+		notFound(w, r)
+		return
+	} else if err != nil {
+		log.Errorf("could not find latest release for project: %s", err)
 		internalError(w, r)
 		return
 	}
 
-	if len(releases) == 0 {
-		log.Warn("no releases found for project")
-		notFound(w, r)
-		return
-	}
-
-	latest := releases[len(releases)-1]
 	s.setLatestVersion(project, latest.Tag)
 	redirectToVersion(w, r, latest.Tag)
 }
@@ -273,7 +270,7 @@ func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	baseURL := urlFor(r, version, "")
-	if err := buildDocs(release.Docs, baseURL, destination); err != nil {
+	if err := buildDocs(release.URL, baseURL, destination, s.sharedFolder); err != nil {
 		log.Errorf("could not build docs for project %s: %s", project, err)
 		internalError(w, r)
 		return
