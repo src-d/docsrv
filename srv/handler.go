@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Masterminds/semver"
 	"github.com/Sirupsen/logrus"
 	"github.com/c4milo/unpackit"
 )
@@ -160,7 +161,7 @@ func (s *DocSrv) listVersions(w http.ResponseWriter, r *http.Request) {
 	if versions == nil {
 		if err := s.refreshProjectVersions(r, project); err != nil {
 			log.Errorf("error refreshing project versions: %s", err)
-			w.WriteHeader(http.StatusInternalServerError)
+			internalError(w, r)
 			return
 		}
 
@@ -170,7 +171,7 @@ func (s *DocSrv) listVersions(w http.ResponseWriter, r *http.Request) {
 	data, err := json.Marshal(versions)
 	if err != nil {
 		log.Errorf("error serving project versions: %s", err)
-		w.WriteHeader(http.StatusInternalServerError)
+		internalError(w, r)
 		return
 	}
 
@@ -190,19 +191,27 @@ func (s *DocSrv) redirectToLatest(w http.ResponseWriter, r *http.Request) {
 	releases, err := s.github.Releases(project, false)
 	if err != nil {
 		log.Errorf("could not find releases for project: %s", err)
-		w.WriteHeader(http.StatusInternalServerError)
+		internalError(w, r)
 		return
 	}
 
 	if len(releases) == 0 {
 		log.Warn("no releases found for project")
-		w.WriteHeader(http.StatusNotFound)
+		notFound(w, r)
 		return
 	}
 
 	latest := releases[len(releases)-1]
 	s.setLatestVersion(project, latest.Tag)
 	redirectToVersion(w, r, latest.Tag)
+}
+
+func notFound(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/404.html", http.StatusTemporaryRedirect)
+}
+
+func internalError(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/500.html", http.StatusTemporaryRedirect)
 }
 
 func redirectToVersion(w http.ResponseWriter, r *http.Request, version string) {
@@ -222,42 +231,60 @@ func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
 			WithField("version", version)
 	)
 
-	if !s.isInstalled(project, version) {
-		var done = make(chan struct{}, 0)
-		go func() {
-			if err := s.refreshProjectVersions(r, project); err != nil {
-				log.Error(err.Error())
-			}
-
-			close(done)
-		}()
-
-		release, err := s.github.Release(project, version)
-		if err != nil {
-			log.Errorf("could not find release for project: %s", err)
-			w.WriteHeader(http.StatusInternalServerError)
+	if s.isInstalled(project, version) {
+		// If the version is not a version, it's probably a file, so send just a basic 404 status
+		// code instead of the full not found page.
+		if _, err := semver.NewVersion(version); err != nil {
+			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
-		s.trySetLatestVersion(project, release.Tag)
-		host := strings.Split(r.Host, ":")[0]
-		destination := filepath.Join(s.baseFolder, host, version)
-		if err := os.MkdirAll(destination, 0740); err != nil {
-			log.Errorf("could not build folder structure for project %s: %s", project, err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		baseURL := urlFor(r, version, "")
-		if err := buildDocs(release.Docs, baseURL, destination); err != nil {
-			log.Errorf("could not build docs for project %s: %s", project, err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		<-done
-		s.install(project, version)
+		// if docs for this version are installed but the request made it here
+		// it means the document being requested does not exist.
+		notFound(w, r)
+		return
 	}
+
+	// refresh project versions in parallel to not block the other expensive
+	// operation: actually downloading and building the docs.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		if err := s.refreshProjectVersions(r, project); err != nil {
+			log.Error(err.Error())
+		}
+
+		wg.Done()
+	}()
+
+	release, err := s.github.Release(project, version)
+	if err == ErrNotFound {
+		notFound(w, r)
+		return
+	} else if err != nil {
+		log.Errorf("could not find release for project: %s", err)
+		internalError(w, r)
+		return
+	}
+
+	s.trySetLatestVersion(project, release.Tag)
+	host := strings.Split(r.Host, ":")[0]
+	destination := filepath.Join(s.baseFolder, host, version)
+	if err := os.MkdirAll(destination, 0740); err != nil {
+		log.Errorf("could not build folder structure for project %s: %s", project, err)
+		internalError(w, r)
+		return
+	}
+
+	baseURL := urlFor(r, version, "")
+	if err := buildDocs(release.Docs, baseURL, destination); err != nil {
+		log.Errorf("could not build docs for project %s: %s", project, err)
+		internalError(w, r)
+		return
+	}
+
+	wg.Wait()
+	s.install(project, version)
 
 	http.Redirect(w, r, r.URL.String(), http.StatusTemporaryRedirect)
 }
@@ -274,7 +301,7 @@ func recoverFromPanic(w http.ResponseWriter, req *http.Request) {
 	if r := recover(); r != nil {
 		logrus.WithField("URL", req.URL.String()).
 			Errorf("recovered from panic: %v", r)
-		w.WriteHeader(http.StatusInternalServerError)
+		internalError(w, req)
 	}
 }
 
