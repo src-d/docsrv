@@ -6,6 +6,7 @@ RUN apk update \
         && apk add --no-cache build-base
 
 RUN mkdir -p /etc/shared \
+        && mkdir -p /etc/docsrv-init \
         && mkdir -p /var/www/public/errors
 
 COPY entrypoint.sh .

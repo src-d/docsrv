@@ -59,6 +59,7 @@ docker run -p 9090:9090 --name docsrv-instance \
         -e GITHUB_ORG "your github org/user name" \
         -v /path/to/host/logs:/var/log/docsrv \
         -v /path/to/error/pages:/var/www/public/errors \
+        -v /path/to/init/scripts:/etc/docsrv-init \
         docsrv
 ```
 
@@ -66,3 +67,4 @@ docker run -p 9090:9090 --name docsrv-instance \
 
 * If not `GITHUB_API_KEY` is provided, the requests will not be authenticated. That means harder rate limits and unability to fetch private repositories.
 * To override the error pages, mount a volume on `/var/www/public/errors` with `404.html` and `500.html`. If any of these two files does not exist, they will be created when the container starts. You may use assets contained in the same errors folder as if they were on the root of the site.
+* You can add custom init bash scripts by mounting a volume on `/etc/docsrv-init`. All `*.sh` files there will be executed. You can use this to install dependencies needed by your documentation build scripts. Take into account the container is an alpine linux.

@@ -10,4 +10,11 @@ if [ ! -f /var/www/public/errors/500.html ]; then
         echo '<h1>Server Error</h1>' > /var/www/public/errors/500.html;
 fi
 
+# run init scripts, if any
+for file in /etc/docsrv-init/*.sh; do
+        if [ -f $file ]; then
+                sh $file;
+        fi
+done
+
 /usr/bin/supervisord
