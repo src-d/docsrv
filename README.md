@@ -41,7 +41,9 @@ What docsrv will run to build your documentation is `make docs`, all the rest is
 * `DESTINATION_FOLDER`: root folder where the documentation site should be built by the makefile.
 * `SHARED_FOLDER`: a shared folder where the makefile can store things (for example, to cache templates, etc).
 * `BASE_URL`: the base url of the project site (e.g. `http://project.mydomain.tld/v1.0.0`).
-
+* `VERSION_NAME`: version being built.
+* `REPOSITORY`: repository name (e.g. `foo` for https://github.com/bar/foo).
+* `REPOSITORY_OWNER`: repository owner name (e.g. `bar` for https://github.com/bar/foo).
 
 ### Release restrictions
 

@@ -19,6 +19,7 @@ const (
 )
 
 type DocSrv struct {
+	owner          string
 	baseFolder     string
 	sharedFolder   string
 	github         GitHub
@@ -46,6 +47,7 @@ const latestVersionLifetime = 1 * time.Hour
 
 func NewDocSrv(apiKey, org string) *DocSrv {
 	return &DocSrv{
+		org,
 		defaultBaseFolder,
 		defaultSharedFolder,
 		NewGitHub(apiKey, org),
@@ -269,8 +271,16 @@ func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	baseURL := urlFor(r, version, "")
-	if err := buildDocs(release.URL, baseURL, destination, s.sharedFolder); err != nil {
+	conf := buildConfig{
+		tarballURL:   release.URL,
+		baseURL:      urlFor(r, version, ""),
+		destination:  destination,
+		sharedFolder: s.sharedFolder,
+		version:      version,
+		project:      project,
+		owner:        s.owner,
+	}
+	if err := buildDocs(conf); err != nil {
 		log.Errorf("could not build docs for project %s: %s", project, err)
 		internalError(w, r)
 		return

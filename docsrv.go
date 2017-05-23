@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/erizocosmico/docsrv/srv"
+	"github.com/src-d/docsrv/srv"
 )
 
 func main() {

@@ -32,14 +32,17 @@ func assertJSON(t *testing.T, handler http.Handler, requestURL string, expected 
 }
 
 const expectedDocsOutput = `%s
+%s
+%s
+%s
 /etc/shared
 `
 
-func assertMakefileOutput(t *testing.T, tmpDir, baseURL string) {
+func assertMakefileOutput(t *testing.T, tmpDir, baseURL, project, owner, version string) {
 	fp := filepath.Join(tmpDir, "out")
 	data, err := ioutil.ReadFile(fp)
 	require.NoError(t, err)
-	require.Equal(t, fmt.Sprintf(expectedDocsOutput, baseURL), string(data))
+	require.Equal(t, fmt.Sprintf(expectedDocsOutput, baseURL, project, owner, version), string(data))
 }
 
 func assertNotFound(t *testing.T, handler http.Handler, requestURL string) {
@@ -136,6 +139,7 @@ func newTestSrv(github GitHub) *DocSrv {
 	return &DocSrv{
 		"",
 		"",
+		"",
 		github,
 		new(sync.RWMutex),
 		make(map[string]latestVersion),
@@ -155,6 +159,9 @@ const testMakefile = `
 docs:
 	@OUTPUT=$(DESTINATION_FOLDER)/out; \
 	echo "$(BASE_URL)" >> $$OUTPUT; \
+	echo "$(REPOSITORY)" >> $$OUTPUT; \
+	echo "$(REPOSITORY_OWNER)" >> $$OUTPUT; \
+	echo "$(VERSION_NAME)" >> $$OUTPUT; \
 	echo "$(SHARED_FOLDER)" >> $$OUTPUT;
 `
 
