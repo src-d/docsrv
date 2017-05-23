@@ -15,6 +15,15 @@ func TestBuildDocs(t *testing.T) {
 	tmpDir, err := ioutil.TempDir("", "docsrv-test-")
 	require.NoError(err)
 
-	require.NoError(buildDocs(url, "http://foo.bar", tmpDir, defaultSharedFolder))
-	assertMakefileOutput(t, tmpDir, "http://foo.bar")
+	conf := buildConfig{
+		tarballURL:   url,
+		baseURL:      "http://foo.bar",
+		destination:  tmpDir,
+		sharedFolder: defaultSharedFolder,
+		project:      "src-d",
+		owner:        "docsrv",
+		version:      "v1.2.3",
+	}
+	require.NoError(buildDocs(conf))
+	assertMakefileOutput(t, tmpDir, conf.baseURL, conf.project, conf.owner, conf.version)
 }

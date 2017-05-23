@@ -92,6 +92,7 @@ func TestPrepareVersion(t *testing.T) {
 
 	github := newGitHubMock()
 	srv := newTestSrv(github)
+	srv.owner = "bar"
 	srv.baseFolder = tmpDir
 	srv.sharedFolder = defaultSharedFolder
 
@@ -108,6 +109,9 @@ func TestPrepareVersion(t *testing.T) {
 	assertMakefileOutput(t,
 		filepath.Join(tmpDir, "foo.bar.baz", "v1.0.0"),
 		"http://foo.bar.baz/v1.0.0",
+		"foo",
+		"bar",
+		"v1.0.0",
 	)
 
 	require.Len(srv.versions["foo"], 1)
