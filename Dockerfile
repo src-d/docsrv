@@ -7,6 +7,7 @@ RUN apk update \
 
 RUN mkdir -p /etc/shared \
         && mkdir -p /var/www/public/errors
+
 COPY entrypoint.sh .
 COPY supervisord.conf /etc/supervisord.conf
 COPY bin /bin

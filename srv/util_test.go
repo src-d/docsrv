@@ -76,7 +76,9 @@ type gitHubMock struct {
 }
 
 func newGitHubMock() *gitHubMock {
-	return &gitHubMock{make(map[string]map[string]string)}
+	return &gitHubMock{
+		make(map[string]map[string]string),
+	}
 }
 
 func (m *gitHubMock) add(project, version, url string) {
@@ -87,13 +89,13 @@ func (m *gitHubMock) add(project, version, url string) {
 	m.releases[project][version] = url
 }
 
-func (m *gitHubMock) Releases(project string, all bool) ([]*Release, error) {
+func (m *gitHubMock) Releases(project string) ([]*Release, error) {
 	if proj, ok := m.releases[project]; ok {
 		var releases []*Release
 		for v, url := range proj {
 			releases = append(releases, &Release{
-				Tag:  v,
-				Docs: url,
+				Tag: v,
+				URL: url,
 			})
 		}
 		sort.Sort(byTag(releases))
@@ -107,8 +109,8 @@ func (m *gitHubMock) Release(project, version string) (*Release, error) {
 	if proj, ok := m.releases[project]; ok {
 		if rel, ok := proj[version]; ok {
 			return &Release{
-				Tag:  version,
-				Docs: rel,
+				Tag: version,
+				URL: rel,
 			}, nil
 		}
 	}
@@ -116,8 +118,23 @@ func (m *gitHubMock) Release(project, version string) (*Release, error) {
 	return nil, fmt.Errorf("not found")
 }
 
+func (m *gitHubMock) Latest(project string) (*Release, error) {
+	var releases []*Release
+	for v, url := range m.releases[project] {
+		releases = append(releases, &Release{v, url})
+	}
+
+	sort.Sort(byTag(releases))
+	if len(releases) == 0 {
+		return nil, ErrNotFound
+	}
+
+	return releases[len(releases)-1], nil
+}
+
 func newTestSrv(github GitHub) *DocSrv {
 	return &DocSrv{
+		"",
 		"",
 		github,
 		new(sync.RWMutex),
@@ -135,10 +152,10 @@ func tarGzServer() (string, func()) {
 }
 
 const testMakefile = `
-build:
+docs:
 	@OUTPUT=$(DESTINATION_FOLDER)/out; \
 	echo "$(BASE_URL)" >> $$OUTPUT; \
-	echo "$(SHARED_REPO_FOLDER)" >> $$OUTPUT;
+	echo "$(SHARED_FOLDER)" >> $$OUTPUT;
 `
 
 func tarGzMakefileHandler(w http.ResponseWriter, r *http.Request) {

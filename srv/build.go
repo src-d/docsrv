@@ -11,7 +11,7 @@ import (
 	"github.com/c4milo/unpackit"
 )
 
-func buildDocs(docsURL, baseURL, destination string) error {
+func buildDocs(docsURL, baseURL, destination, sharedFolder string) error {
 	resp, err := http.Get(docsURL)
 	if err != nil {
 		return err
@@ -28,16 +28,13 @@ func buildDocs(docsURL, baseURL, destination string) error {
 		return fmt.Errorf("error untarring %q: %s", docsURL, err)
 	}
 
-	cmd := exec.Command(
-		"make",
-		"build",
-	)
+	cmd := exec.Command("make", "docs")
 	cmd.Dir = dir
 	cmd.Env = append(
 		os.Environ(),
 		"BASE_URL="+baseURL,
 		"DESTINATION_FOLDER="+destination,
-		"SHARED_REPO_FOLDER="+sharedFolder,
+		"SHARED_FOLDER="+sharedFolder,
 	)
 
 	output, err := cmd.CombinedOutput()

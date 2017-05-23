@@ -1,4 +1,4 @@
-# docsrv
+# docsrv [![Build Status](https://travis-ci.org/src-d/docsrv.svg?branch=master)](https://travis-ci.org/src-d/docsrv)
 
 `docsrv` is an app to serve versioned documentation for GitHub projects on demand.
 Every time a documentation is requested for a version that is not on the server, it is fetched from a GitHub release and installed locally to be served by the Caddy webserver.
@@ -32,18 +32,20 @@ Will output something like this:
 ]
 ```
 
-
 ### Release format
 
-A GitHub release can only be used with `docsrv` if it contains a `docs.tar.gz` asset, is not a draft and is not a pre-release.
+To build the documentation site of your project version, docsrv will download the tarball of the version with the contents your project had at that time. It is required to have a `Makefile` with a task named `docs`.
 
-This `docs.tar.gz` will need to have a `Makefile` in its root with a rule named `build`.
+What docsrv will run to build your documentation is `make docs`, all the rest is handled by the makefile itself. Three parameters for the correct build of the documentation site are passed as environment variables.
 
-The following environment variables will be available for the makefile to use and build itself.
+* `DESTINATION_FOLDER`: root folder where the documentation site should be built by the makefile.
+* `SHARED_FOLDER`: a shared folder where the makefile can store things (for example, to cache templates, etc).
+* `BASE_URL`: the base url of the project site (e.g. `http://project.mydomain.tld/v1.0.0`).
 
-* `BASE_URL`: base url of that project version e.g. `http://project.domain.tld/v1.0.0`.
-* `DESTINATION_FOLDER`: folder where the docs should be built.
-* `SHARED_REPO_FOLDER`: folder where the shared repo, if any, is.
+
+### Release restrictions
+
+A GitHub release can only be used with `docsrv` if is not a draft and is not a pre-release.
 
 ### Install and run
 
@@ -53,7 +55,6 @@ docker build -t docsrv .
 docker run -p 9090:9090 --name docsrv-instance \
         -e GITHUB_API_KEY "(optional) your github api key" \
         -e GITHUB_ORG "your github org/user name" \
-        -e SHARED_REPO "(optional) url of the the repo" \
         -v /path/to/host/logs:/var/log/docsrv \
         -v /path/to/error/pages:/var/www/public/errors \
         docsrv
@@ -61,6 +62,5 @@ docker run -p 9090:9090 --name docsrv-instance \
 
 **Notes:**
 
-* `SHARED_REPO` will be downloaded at the start of the container. It can be used to download a repo that will contain files needed by the docs to be built.
 * If not `GITHUB_API_KEY` is provided, the requests will not be authenticated. That means harder rate limits and unability to fetch private repositories.
 * To override the error pages, mount a volume on `/var/www/public/errors` with `404.html` and `500.html`. If any of these two files does not exist, they will be created when the container starts. You may use assets contained in the same errors folder as if they were on the root of the site.

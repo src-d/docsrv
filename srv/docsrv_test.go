@@ -93,6 +93,7 @@ func TestPrepareVersion(t *testing.T) {
 	github := newGitHubMock()
 	srv := newTestSrv(github)
 	srv.baseFolder = tmpDir
+	srv.sharedFolder = defaultSharedFolder
 
 	github.add("foo", "v1.0.0", url)
 
