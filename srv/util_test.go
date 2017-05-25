@@ -36,6 +36,7 @@ const expectedDocsOutput = `%s
 %s
 %s
 /etc/shared
+true
 `
 
 func assertMakefileOutput(t *testing.T, tmpDir, baseURL, project, owner, version string) {
@@ -162,7 +163,8 @@ docs:
 	echo "$(REPOSITORY)" >> $$OUTPUT; \
 	echo "$(REPOSITORY_OWNER)" >> $$OUTPUT; \
 	echo "$(VERSION_NAME)" >> $$OUTPUT; \
-	echo "$(SHARED_FOLDER)" >> $$OUTPUT;
+	echo "$(SHARED_FOLDER)" >> $$OUTPUT; \
+	echo "$(DOCSRV)" >> $$OUTPUT;
 `
 
 func tarGzMakefileHandler(w http.ResponseWriter, r *http.Request) {

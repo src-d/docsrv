@@ -48,6 +48,7 @@ func buildDocs(conf buildConfig) error {
 		"REPOSITORY="+conf.project,
 		"REPOSITORY_OWNER="+conf.owner,
 		"VERSION_NAME="+conf.version,
+		"DOCSRV=true",
 	)
 
 	output, err := cmd.CombinedOutput()
