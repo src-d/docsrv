@@ -59,12 +59,44 @@ docker run -p 9090:9090 --name docsrv-instance \
         -e GITHUB_ORG "your github org/user name" \
         -v /path/to/host/logs:/var/log/docsrv \
         -v /path/to/error/pages:/var/www/public/errors \
-        -v /path/to/init/scripts:/etc/docsrv-init \
+        -v /path/to/init/scripts:/etc/docsrv/init.d \
         docsrv
 ```
 
 **Notes:**
 
+* The `GITHUB_ORG` will define the default user or organisation that owns the projects served by docsrv. For example, accessing `foo.yourdomain.tld` with `bar` as `GITHUB_ORG` will download and serve documentation for `https://github.com/bar/foo`.
+* Specific hosts can have specific repositories mapped to them. You can do so by adding a mappings file at `/etc/docsrv/mappings.yml`.
 * If not `GITHUB_API_KEY` is provided, the requests will not be authenticated. That means harder rate limits and unability to fetch private repositories.
 * To override the error pages, mount a volume on `/var/www/public/errors` with `404.html` and `500.html`. If any of these two files does not exist, they will be created when the container starts. You may use assets contained in the same errors folder as if they were on the root of the site.
-* You can add custom init bash scripts by mounting a volume on `/etc/docsrv-init`. All `*.sh` files there will be executed. You can use this to install dependencies needed by your documentation build scripts. Take into account the container is an alpine linux.
+* You can add custom init bash scripts by mounting a volume on `/etc/docsrv/init.d`. All `*.sh` files there will be executed. You can use this to install dependencies needed by your documentation build scripts. Take into account the container is an alpine linux.
+
+### Mappings file
+
+In `/etc/docsrv/mappings.yml` you can optionally put a mappings file, which will contain a map from host to GitHub repos in the following format `${OWNER}/${REPO_NAME}`.
+
+```
+foo.mydomain.tld: myorg/foo
+bar.mydomain.tld: otherorg/bar
+```
+
+### Recommended way to use and deploy docsrv
+
+The recommended way to use and deploy docsrv is to have a repo/folder/something with all your configurations and mount all that as volumes in the docsrv container rather than creating your own dockerfile on top of docsrv's.
+
+For example, something like this:
+
+```
+mydir/
+  |- error-pages/
+    |- 404.html
+    |- 500.html
+    |- css/
+      |- style.css
+  |- mappings.yml
+  |- init/
+    |- foo.sh
+    |- bar.sh
+```
+
+Then mount it as a volume using `-v /path/to/mydir:/etc/docsrv` and `-v /path/to/mydir/error-pages:/var/www/public/errors` in the container.

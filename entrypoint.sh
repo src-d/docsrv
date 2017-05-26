@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # run init scripts, if any
-for file in /etc/docsrv-init/*.sh; do
+for file in /etc/docsrv/init.d/*.sh; do
         if [ -f $file ]; then
                 sh $file;
         fi

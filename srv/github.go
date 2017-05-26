@@ -25,21 +25,20 @@ type Release struct {
 // GitHub is a service to retrieve information from GitHub.
 type GitHub interface {
 	// Releases returns all the releases for a project.
-	Releases(project string) ([]*Release, error)
+	Releases(owner, project string) ([]*Release, error)
 	// Release returns the requested release of a project.
-	Release(project, tag string) (*Release, error)
+	Release(owner, project, tag string) (*Release, error)
 	// Latest returns the latest non-draft, non-prerelease release of a project.
-	Latest(project string) (*Release, error)
+	Latest(owner, project string) (*Release, error)
 }
 
 type gitHub struct {
 	apiKey string
-	org    string
 	client *github.Client
 }
 
 // NewGitHub creates a new GitHub service.
-func NewGitHub(apiKey, org string) GitHub {
+func NewGitHub(apiKey string) GitHub {
 	var client *github.Client
 
 	if apiKey != "" {
@@ -50,11 +49,11 @@ func NewGitHub(apiKey, org string) GitHub {
 		client = github.NewClient(nil)
 	}
 
-	return &gitHub{apiKey, org, client}
+	return &gitHub{apiKey, client}
 }
 
-func (g *gitHub) Latest(project string) (*Release, error) {
-	release, resp, err := g.client.Repositories.GetLatestRelease(context.Background(), g.org, project)
+func (g *gitHub) Latest(owner, project string) (*Release, error) {
+	release, resp, err := g.client.Repositories.GetLatestRelease(context.Background(), owner, project)
 
 	// to the go-github, a 404 is an error, but we differentiate between a 404
 	// and a 500
@@ -67,13 +66,13 @@ func (g *gitHub) Latest(project string) (*Release, error) {
 	}
 }
 
-func (g *gitHub) Releases(project string) ([]*Release, error) {
+func (g *gitHub) Releases(owner, project string) ([]*Release, error) {
 	var result []*Release
 	page := 1
 	for {
 		releases, resp, err := g.client.Repositories.ListReleases(
 			context.Background(),
-			g.org,
+			owner,
 			project,
 			&github.ListOptions{Page: page, PerPage: 100},
 		)
@@ -100,10 +99,10 @@ func (g *gitHub) Releases(project string) ([]*Release, error) {
 	return result, nil
 }
 
-func (g *gitHub) Release(project, tag string) (*Release, error) {
+func (g *gitHub) Release(owner, project, tag string) (*Release, error) {
 	release, resp, err := g.client.Repositories.GetReleaseByTag(
 		context.Background(),
-		g.org,
+		owner,
 		project,
 		tag,
 	)

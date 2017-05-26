@@ -12,9 +12,10 @@ import (
 func TestRedirectToLatest(t *testing.T) {
 	github := newGitHubMock()
 	srv := newTestSrv(github)
+	srv.owner = "org"
 
-	github.add("proj1", "v1.0.0", "foo")
-	github.add("proj1", "v0.9.0", "foo")
+	github.add("org", "proj1", "v1.0.0", "foo")
+	github.add("org", "proj1", "v0.9.0", "foo")
 
 	assertRedirect(
 		t, srv,
@@ -24,7 +25,7 @@ func TestRedirectToLatest(t *testing.T) {
 
 	// add a new version and receive the previous one because
 	// it is cached
-	github.add("proj1", "v2.0.0", "baz")
+	github.add("org", "proj1", "v2.0.0", "baz")
 
 	assertRedirect(
 		t, srv,
@@ -96,9 +97,9 @@ func TestPrepareVersion(t *testing.T) {
 	srv.baseFolder = tmpDir
 	srv.sharedFolder = defaultSharedFolder
 
-	github.add("foo", "v1.0.0", url)
+	github.add("bar", "foo", "v1.0.0", url)
 
-	require.Len(srv.versions["foo"], 0)
+	require.Len(srv.versions["bar/foo"], 0)
 
 	assertRedirect(
 		t, srv,
@@ -114,16 +115,17 @@ func TestPrepareVersion(t *testing.T) {
 		"v1.0.0",
 	)
 
-	require.Len(srv.versions["foo"], 1)
+	require.Len(srv.versions["bar/foo"], 1)
 }
 
 func TestListVersions(t *testing.T) {
 	github := newGitHubMock()
 	srv := newTestSrv(github)
-	github.add("foo", "v1.0.0", "")
-	github.add("foo", "v1.1.0", "")
-	github.add("foo", "v1.2.0", "")
-	github.add("bar", "v1.3.0", "")
+	srv.owner = "org"
+	github.add("org", "foo", "v1.0.0", "")
+	github.add("org", "foo", "v1.1.0", "")
+	github.add("org", "foo", "v1.2.0", "")
+	github.add("org", "bar", "v1.3.0", "")
 
 	assertJSON(t, srv, "http://foo.bar.baz/versions.json", []*version{
 		{"v1.0.0", "http://foo.bar.baz/v1.0.0"},
