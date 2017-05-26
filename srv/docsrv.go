@@ -211,7 +211,11 @@ func internalError(w http.ResponseWriter, r *http.Request) {
 
 func redirectToVersion(w http.ResponseWriter, r *http.Request, version string) {
 	path := strings.Replace(r.URL.Path, "/latest/", "", 1)
-	http.Redirect(w, r, urlFor(r, version, path), http.StatusTemporaryRedirect)
+	url := urlFor(r, version, path)
+	if path == "" {
+		url = ensureEndingSlash(url)
+	}
+	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
 func urlFor(r *http.Request, version, path string) string {
@@ -290,6 +294,13 @@ func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
 	s.install(project, version)
 
 	http.Redirect(w, r, r.URL.String(), http.StatusTemporaryRedirect)
+}
+
+func ensureEndingSlash(url string) string {
+	if strings.HasSuffix(url, "/") {
+		return url
+	}
+	return url + "/"
 }
 
 func projectNameFromReq(r *http.Request) string {

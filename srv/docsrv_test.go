@@ -19,7 +19,7 @@ func TestRedirectToLatest(t *testing.T) {
 	assertRedirect(
 		t, srv,
 		"http://proj1.foo.bar/latest/",
-		"http://proj1.foo.bar/v1.0.0",
+		"http://proj1.foo.bar/v1.0.0/",
 	)
 
 	// add a new version and receive the previous one because
@@ -29,7 +29,7 @@ func TestRedirectToLatest(t *testing.T) {
 	assertRedirect(
 		t, srv,
 		"http://proj1.foo.bar/latest/",
-		"http://proj1.foo.bar/v1.0.0",
+		"http://proj1.foo.bar/v1.0.0/",
 	)
 
 	// if the path contains something, redirect will have it as well
