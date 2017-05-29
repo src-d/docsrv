@@ -94,7 +94,7 @@ mydir/
     |- css/
       |- style.css
   |- mappings.yml
-  |- init/
+  |- init.d/
     |- foo.sh
     |- bar.sh
 ```
