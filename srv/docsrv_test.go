@@ -48,6 +48,24 @@ func TestRedirectToLatest(t *testing.T) {
 	)
 }
 
+func TestRedirectToLatest_WithMapping(t *testing.T) {
+	github := newGitHubMock()
+	srv := newTestSrv(github)
+	srv.owner = "org"
+	srv.mappings = mappings{
+		"proj1.foo.bar": "org2/proj1",
+	}
+
+	github.add("org", "proj1", "v1.0.0", "foo")
+	github.add("org2", "proj1", "v0.9.0", "foo")
+
+	assertRedirect(
+		t, srv,
+		"http://proj1.foo.bar/latest/",
+		"http://proj1.foo.bar/v0.9.0/",
+	)
+}
+
 func TestProjectNameFromReq(t *testing.T) {
 	cases := []struct {
 		url      string
