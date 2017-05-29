@@ -16,19 +16,24 @@ import (
 const (
 	defaultSharedFolder = "/etc/shared"
 	defaultBaseFolder   = "/var/www/public"
+	defaultMappingsFile = "/etc/docsrv/mappings.yml"
 )
 
 type DocSrv struct {
-	owner          string
-	baseFolder     string
-	sharedFolder   string
-	github         GitHub
+	owner        string
+	baseFolder   string
+	sharedFolder string
+	github       GitHub
+	mappings     mappings
+
 	mut            *sync.RWMutex
 	latestVersions map[string]latestVersion
-	installMut     *sync.RWMutex
-	installed      map[string]struct{}
-	versionMut     *sync.RWMutex
-	versions       map[string][]*version
+
+	installMut *sync.RWMutex
+	installed  map[string]struct{}
+
+	versionMut *sync.RWMutex
+	versions   map[string][]*version
 }
 
 type version struct {
@@ -42,40 +47,55 @@ type latestVersion struct {
 	version  string
 }
 
+// isExpired reports whether this version is expired or not and should be re-checked.
+func (v latestVersion) isExpired() bool {
+	return v.cachedAt.Add(latestVersionLifetime).After(time.Now())
+}
+
 // latestVersionLifetime defines the time a latest version is valid.
 const latestVersionLifetime = 1 * time.Hour
 
-func NewDocSrv(apiKey, org string) *DocSrv {
+// NewDocSrv creates a new `docsrv` service with the default configuration
+// and the given default organisation and github api key.
+func NewDocSrv(apiKey, org string) (*DocSrv, error) {
+	mappings, err := loadMappings(defaultMappingsFile)
+	if err != nil {
+		return nil, err
+	}
+
 	return &DocSrv{
 		org,
 		defaultBaseFolder,
 		defaultSharedFolder,
-		NewGitHub(apiKey, org),
+		NewGitHub(apiKey),
+		mappings,
 		new(sync.RWMutex),
 		make(map[string]latestVersion),
 		new(sync.RWMutex),
 		make(map[string]struct{}),
 		new(sync.RWMutex),
 		make(map[string][]*version),
-	}
+	}, nil
 }
 
 // setLatestVersion will set the given version as the latest version for a
 // project.
-func (s *DocSrv) setLatestVersion(project, version string) {
+func (s *DocSrv) setLatestVersion(owner, project, version string) {
+	key := filepath.Join(owner, project)
 	s.mut.Lock()
 	defer s.mut.Unlock()
-	s.latestVersions[project] = latestVersion{time.Now(), version}
+	s.latestVersions[key] = latestVersion{time.Now(), version}
 }
 
 // latestVersion will return the latest version of a project and a boolean
 // reporting whether or not that version exists.
 // If the version is expired, it will return false.
-func (s *DocSrv) latestVersion(project string) (string, bool) {
+func (s *DocSrv) latestVersion(owner, project string) (string, bool) {
+	key := filepath.Join(owner, project)
 	s.mut.Lock()
 	defer s.mut.Unlock()
-	v := s.latestVersions[project]
-	if v.cachedAt.Add(latestVersionLifetime).After(time.Now()) {
+	v := s.latestVersions[key]
+	if v.isExpired() {
 		return v.version, true
 	}
 	return "", false
@@ -84,40 +104,41 @@ func (s *DocSrv) latestVersion(project string) (string, bool) {
 // trySetLatestVersion will set the latest version of a given project to the
 // given one only if there is a previous version and is lower than the
 // given one.
-func (s *DocSrv) trySetLatestVersion(project, version string) {
-	if v, ok := s.latestVersion(project); ok {
+func (s *DocSrv) trySetLatestVersion(owner, project, version string) {
+	if v, ok := s.latestVersion(owner, project); ok {
 		v1 := newVersion(v)
 		v2 := newVersion(version)
 
 		if v1.LessThan(v2) {
-			s.setLatestVersion(project, version)
+			s.setLatestVersion(owner, project, version)
 		}
 	}
 }
 
-func (s *DocSrv) isInstalled(project, version string) bool {
-	path := filepath.Join(project, version)
+func (s *DocSrv) isInstalled(owner, project, version string) bool {
+	key := filepath.Join(owner, project, version)
 	s.installMut.Lock()
 	defer s.installMut.Unlock()
-	_, ok := s.installed[path]
+	_, ok := s.installed[key]
 	return ok
 }
 
-func (s *DocSrv) install(project, version string) {
-	path := filepath.Join(project, version)
+func (s *DocSrv) install(owner, project, version string) {
+	key := filepath.Join(owner, project, version)
 	s.installMut.Lock()
 	defer s.installMut.Unlock()
-	s.installed[path] = struct{}{}
+	s.installed[key] = struct{}{}
 }
 
-func (s *DocSrv) projectVersions(project string) []*version {
+func (s *DocSrv) projectVersions(owner, project string) []*version {
+	key := filepath.Join(owner, project)
 	s.versionMut.Lock()
 	defer s.versionMut.Unlock()
-	return s.versions[project]
+	return s.versions[key]
 }
 
-func (s *DocSrv) refreshProjectVersions(req *http.Request, project string) error {
-	releases, err := s.github.Releases(project)
+func (s *DocSrv) refreshProjectVersions(req *http.Request, owner, project string) error {
+	releases, err := s.github.Releases(owner, project)
 	if err != nil {
 		return err
 	}
@@ -133,8 +154,17 @@ func (s *DocSrv) refreshProjectVersions(req *http.Request, project string) error
 	s.versionMut.Lock()
 	defer s.versionMut.Unlock()
 
-	s.versions[project] = versions
+	key := filepath.Join(owner, project)
+	s.versions[key] = versions
 	return nil
+}
+
+func (s *DocSrv) projectInfo(r *http.Request) (owner, project string) {
+	if owner, project, ok := s.mappings.forHost(r.Host); ok {
+		return owner, project
+	}
+
+	return s.owner, projectNameFromReq(r)
 }
 
 func (s *DocSrv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -150,20 +180,21 @@ func (s *DocSrv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *DocSrv) listVersions(w http.ResponseWriter, r *http.Request) {
-	project := projectNameFromReq(r)
-	versions := s.projectVersions(project)
-	log := logrus.WithField("project", project)
+	owner, project := s.projectInfo(r)
+	versions := s.projectVersions(owner, project)
+	log := logrus.WithField("project", project).
+		WithField("owner", owner)
 
 	// if versions is nil, project versions haven't been refreshed yet
 	// so refresh them and then serve them
 	if versions == nil {
-		if err := s.refreshProjectVersions(r, project); err != nil {
+		if err := s.refreshProjectVersions(r, owner, project); err != nil {
 			log.Errorf("error refreshing project versions: %s", err)
 			internalError(w, r)
 			return
 		}
 
-		versions = s.projectVersions(project)
+		versions = s.projectVersions(owner, project)
 	}
 
 	data, err := json.Marshal(versions)
@@ -178,15 +209,16 @@ func (s *DocSrv) listVersions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *DocSrv) redirectToLatest(w http.ResponseWriter, r *http.Request) {
-	project := projectNameFromReq(r)
-	log := logrus.WithField("project", project)
+	owner, project := s.projectInfo(r)
+	log := logrus.WithField("project", project).
+		WithField("owner", owner)
 
-	if v, ok := s.latestVersion(project); ok {
+	if v, ok := s.latestVersion(owner, project); ok {
 		redirectToVersion(w, r, v)
 		return
 	}
 
-	latest, err := s.github.Latest(project)
+	latest, err := s.github.Latest(owner, project)
 	if err == ErrNotFound {
 		log.Warn("no releases found for project")
 		notFound(w, r)
@@ -197,8 +229,90 @@ func (s *DocSrv) redirectToLatest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.setLatestVersion(project, latest.Tag)
+	s.setLatestVersion(owner, project, latest.Tag)
 	redirectToVersion(w, r, latest.Tag)
+}
+
+func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
+	var (
+		owner, project = s.projectInfo(r)
+		version        = versionFromReq(r)
+		log            = logrus.WithField("project", project).
+				WithField("owner", owner).
+				WithField("version", version)
+	)
+
+	if s.isInstalled(owner, project, version) {
+		// If the version is not a version, it's probably a file, so send just a basic 404 status
+		// code instead of the full not found page.
+		if _, err := semver.NewVersion(version); err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		// if docs for this version are installed but the request made it here
+		// it means the document being requested does not exist.
+		notFound(w, r)
+		return
+	}
+
+	// refresh project versions in parallel to not block the other expensive
+	// operation: actually downloading and building the docs.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		if err := s.refreshProjectVersions(r, owner, project); err != nil {
+			log.Error(err.Error())
+		}
+
+		wg.Done()
+	}()
+
+	release, err := s.github.Release(owner, project, version)
+	if err == ErrNotFound {
+		notFound(w, r)
+		return
+	} else if err != nil {
+		log.Errorf("could not find release for project: %s", err)
+		internalError(w, r)
+		return
+	}
+
+	s.trySetLatestVersion(owner, project, release.Tag)
+	host := strings.Split(r.Host, ":")[0]
+	destination := filepath.Join(s.baseFolder, host, version)
+	if err := os.MkdirAll(destination, 0740); err != nil {
+		log.Errorf("could not build folder structure for project %s: %s", project, err)
+		internalError(w, r)
+		return
+	}
+
+	conf := buildConfig{
+		tarballURL:   release.URL,
+		baseURL:      urlFor(r, version, ""),
+		destination:  destination,
+		sharedFolder: s.sharedFolder,
+		version:      version,
+		project:      project,
+		owner:        owner,
+	}
+	if err := buildDocs(conf); err != nil {
+		log.Errorf("could not build docs for project %s: %s", project, err)
+		internalError(w, r)
+		return
+	}
+
+	wg.Wait()
+	s.install(owner, project, version)
+
+	http.Redirect(w, r, r.URL.String(), http.StatusTemporaryRedirect)
+}
+
+func ensureEndingSlash(url string) string {
+	if strings.HasSuffix(url, "/") {
+		return url
+	}
+	return url + "/"
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) {
@@ -220,87 +334,6 @@ func redirectToVersion(w http.ResponseWriter, r *http.Request, version string) {
 
 func urlFor(r *http.Request, version, path string) string {
 	return reqScheme(r) + "://" + filepath.Join(r.Host, version, path)
-}
-
-func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
-	var (
-		project = projectNameFromReq(r)
-		version = versionFromReq(r)
-		log     = logrus.WithField("project", project).
-			WithField("version", version)
-	)
-
-	if s.isInstalled(project, version) {
-		// If the version is not a version, it's probably a file, so send just a basic 404 status
-		// code instead of the full not found page.
-		if _, err := semver.NewVersion(version); err != nil {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		// if docs for this version are installed but the request made it here
-		// it means the document being requested does not exist.
-		notFound(w, r)
-		return
-	}
-
-	// refresh project versions in parallel to not block the other expensive
-	// operation: actually downloading and building the docs.
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		if err := s.refreshProjectVersions(r, project); err != nil {
-			log.Error(err.Error())
-		}
-
-		wg.Done()
-	}()
-
-	release, err := s.github.Release(project, version)
-	if err == ErrNotFound {
-		notFound(w, r)
-		return
-	} else if err != nil {
-		log.Errorf("could not find release for project: %s", err)
-		internalError(w, r)
-		return
-	}
-
-	s.trySetLatestVersion(project, release.Tag)
-	host := strings.Split(r.Host, ":")[0]
-	destination := filepath.Join(s.baseFolder, host, version)
-	if err := os.MkdirAll(destination, 0740); err != nil {
-		log.Errorf("could not build folder structure for project %s: %s", project, err)
-		internalError(w, r)
-		return
-	}
-
-	conf := buildConfig{
-		tarballURL:   release.URL,
-		baseURL:      urlFor(r, version, ""),
-		destination:  destination,
-		sharedFolder: s.sharedFolder,
-		version:      version,
-		project:      project,
-		owner:        s.owner,
-	}
-	if err := buildDocs(conf); err != nil {
-		log.Errorf("could not build docs for project %s: %s", project, err)
-		internalError(w, r)
-		return
-	}
-
-	wg.Wait()
-	s.install(project, version)
-
-	http.Redirect(w, r, r.URL.String(), http.StatusTemporaryRedirect)
-}
-
-func ensureEndingSlash(url string) string {
-	if strings.HasSuffix(url, "/") {
-		return url
-	}
-	return url + "/"
 }
 
 func projectNameFromReq(r *http.Request) string {

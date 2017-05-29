@@ -6,11 +6,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testOwner   = "erizocosmico"
+	testProject = "test-docsrv"
+)
+
 func TestGitHubReleases(t *testing.T) {
 	require := require.New(t)
-	github := NewGitHub("", "erizocosmico")
+	github := NewGitHub("")
 
-	releases, err := github.Releases("test-docsrv")
+	releases, err := github.Releases(testOwner, testProject)
 	require.NoError(err)
 
 	expected := []string{"v1.0.0", "v1.4.0", "v1.5.0"}
@@ -24,21 +29,21 @@ func TestGitHubReleases(t *testing.T) {
 
 func TestGitHubRelease(t *testing.T) {
 	require := require.New(t)
-	github := NewGitHub("", "erizocosmico")
+	github := NewGitHub("")
 
-	release, err := github.Release("test-docsrv", "v1.6.0")
+	release, err := github.Release(testOwner, testProject, "v1.6.0")
 	require.Error(err)
 
-	release, err = github.Release("test-docsrv", "v1.4.0")
+	release, err = github.Release(testOwner, testProject, "v1.4.0")
 	require.NoError(err)
 	require.Equal("v1.4.0", release.Tag)
 }
 
 func TestGitHubLatest(t *testing.T) {
 	require := require.New(t)
-	github := NewGitHub("", "erizocosmico")
+	github := NewGitHub("")
 
-	release, err := github.Latest("test-docsrv")
+	release, err := github.Latest(testOwner, testProject)
 	require.NoError(err)
 	require.Equal("v1.5.0", release.Tag)
 }

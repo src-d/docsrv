@@ -1,11 +1,11 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/src-d/docsrv/srv"
 )
 
@@ -15,12 +15,19 @@ func main() {
 		org    = os.Getenv("GITHUB_ORG")
 	)
 
+	docsrv, err := srv.NewDocSrv(apiKey, org)
+	if err != nil {
+		logrus.Fatalf("unable to start a new docsrv: %s", err)
+	}
+
 	server := &http.Server{
 		Addr:         ":9091",
-		Handler:      srv.NewDocSrv(apiKey, org),
+		Handler:      docsrv,
 		WriteTimeout: 5 * time.Minute,
 		ReadTimeout:  1 * time.Minute,
 	}
 
-	log.Fatal(server.ListenAndServe())
+	if err := server.ListenAndServe(); err != nil {
+		logrus.Fatal(err)
+	}
 }

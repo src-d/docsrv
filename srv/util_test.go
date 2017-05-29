@@ -85,16 +85,18 @@ func newGitHubMock() *gitHubMock {
 	}
 }
 
-func (m *gitHubMock) add(project, version, url string) {
-	if _, ok := m.releases[project]; !ok {
-		m.releases[project] = make(map[string]string)
+func (m *gitHubMock) add(owner, project, version, url string) {
+	key := filepath.Join(owner, project)
+	if _, ok := m.releases[key]; !ok {
+		m.releases[key] = make(map[string]string)
 	}
 
-	m.releases[project][version] = url
+	m.releases[key][version] = url
 }
 
-func (m *gitHubMock) Releases(project string) ([]*Release, error) {
-	if proj, ok := m.releases[project]; ok {
+func (m *gitHubMock) Releases(owner, project string) ([]*Release, error) {
+	key := filepath.Join(owner, project)
+	if proj, ok := m.releases[key]; ok {
 		var releases []*Release
 		for v, url := range proj {
 			releases = append(releases, &Release{
@@ -109,8 +111,9 @@ func (m *gitHubMock) Releases(project string) ([]*Release, error) {
 	return nil, nil
 }
 
-func (m *gitHubMock) Release(project, version string) (*Release, error) {
-	if proj, ok := m.releases[project]; ok {
+func (m *gitHubMock) Release(owner, project, version string) (*Release, error) {
+	key := filepath.Join(owner, project)
+	if proj, ok := m.releases[key]; ok {
 		if rel, ok := proj[version]; ok {
 			return &Release{
 				Tag: version,
@@ -122,9 +125,10 @@ func (m *gitHubMock) Release(project, version string) (*Release, error) {
 	return nil, fmt.Errorf("not found")
 }
 
-func (m *gitHubMock) Latest(project string) (*Release, error) {
+func (m *gitHubMock) Latest(owner, project string) (*Release, error) {
 	var releases []*Release
-	for v, url := range m.releases[project] {
+	key := filepath.Join(owner, project)
+	for v, url := range m.releases[key] {
 		releases = append(releases, &Release{v, url})
 	}
 
@@ -142,6 +146,7 @@ func newTestSrv(github GitHub) *DocSrv {
 		"",
 		"",
 		github,
+		make(mappings),
 		new(sync.RWMutex),
 		make(map[string]latestVersion),
 		new(sync.RWMutex),
