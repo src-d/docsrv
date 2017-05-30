@@ -12,7 +12,7 @@ import (
 func TestRedirectToLatest(t *testing.T) {
 	github := newGitHubMock()
 	srv := newTestSrv(github)
-	srv.owner = "org"
+	srv.defaultOwner = "org"
 
 	github.add("org", "proj1", "v1.0.0", "foo")
 	github.add("org", "proj1", "v0.9.0", "foo")
@@ -51,7 +51,7 @@ func TestRedirectToLatest(t *testing.T) {
 func TestRedirectToLatest_WithMapping(t *testing.T) {
 	github := newGitHubMock()
 	srv := newTestSrv(github)
-	srv.owner = "org"
+	srv.defaultOwner = "org"
 	srv.mappings = mappings{
 		"proj1.foo.bar": "org2/proj1",
 	}
@@ -111,7 +111,7 @@ func TestPrepareVersion(t *testing.T) {
 
 	github := newGitHubMock()
 	srv := newTestSrv(github)
-	srv.owner = "bar"
+	srv.defaultOwner = "bar"
 	srv.baseFolder = tmpDir
 	srv.sharedFolder = defaultSharedFolder
 
@@ -139,7 +139,7 @@ func TestPrepareVersion(t *testing.T) {
 func TestListVersions(t *testing.T) {
 	github := newGitHubMock()
 	srv := newTestSrv(github)
-	srv.owner = "org"
+	srv.defaultOwner = "org"
 	github.add("org", "foo", "v1.0.0", "")
 	github.add("org", "foo", "v1.1.0", "")
 	github.add("org", "foo", "v1.2.0", "")

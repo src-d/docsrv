@@ -11,16 +11,27 @@ import (
 	"github.com/c4milo/unpackit"
 )
 
+// buildConfig contains all the configuration passed to the `build docs`
+// command to build the docs for a project version.
 type buildConfig struct {
-	owner        string
-	project      string
-	version      string
-	tarballURL   string
-	baseURL      string
-	destination  string
+	// owner is the name of the organization or user who owns the repository.
+	owner string
+	// project is the repository name.
+	project string
+	// version name.
+	version string
+	// tarballURL is the URL of the .tar.gz with the code of the version.
+	tarballURL string
+	// baseURL is the base URL for the documentation site. e.g. foo.mydomain.tld/v1.0.0.
+	baseURL string
+	// destination is the folder where the documentation should be put once
+	// is built.
+	destination string
+	// sharedFolder will contain all the shared assets needed in the generation.
 	sharedFolder string
 }
 
+// buildDocs builds the documentation site for the given build configuration.
 func buildDocs(conf buildConfig) error {
 	resp, err := http.Get(conf.tarballURL)
 	if err != nil {

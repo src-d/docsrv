@@ -55,8 +55,8 @@ A GitHub release can only be used with `docsrv` if is not a draft and is not a p
 make build
 docker build -t docsrv .
 docker run -p 9090:9090 --name docsrv-instance \
-        -e GITHUB_API_KEY "(optional) your github api key" \
-        -e GITHUB_ORG "your github org/user name" \
+        -e GITHUB_API_KEY="(optional) your github api key" \
+        -e GITHUB_ORG="your github org/user name" \
         -v /path/to/host/logs:/var/log/docsrv \
         -v /path/to/error/pages:/var/www/public/errors \
         -v /path/to/init/scripts:/etc/docsrv/init.d \
@@ -100,3 +100,9 @@ mydir/
 ```
 
 Then mount it as a volume using `-v /path/to/mydir:/etc/docsrv` and `-v /path/to/mydir/error-pages:/var/www/public/errors` in the container.
+
+### Order of precedence in serving requests
+
+1. `/versions.json` without any version has the highest precedence.
+2. `/` without any version has the second highest predecence and acts as if it was `/latest/`.
+3. `/$VERSION/$PATH` has the lowest precedence.

@@ -11,7 +11,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-var ErrNotFound = errors.New("unable to find a release")
+var errNotFound = errors.New("unable to find a release")
 
 // Release represents a project release with a tag name and an URL to the
 // documentation asset.
@@ -58,7 +58,7 @@ func (g *gitHub) Latest(owner, project string) (*Release, error) {
 	// to the go-github, a 404 is an error, but we differentiate between a 404
 	// and a 500
 	if r := newRelease(release); r == nil || resp.StatusCode == http.StatusNotFound {
-		return nil, ErrNotFound
+		return nil, errNotFound
 	} else if err != nil {
 		return nil, err
 	} else {
@@ -110,7 +110,7 @@ func (g *gitHub) Release(owner, project, tag string) (*Release, error) {
 	// to the go-github, a 404 is an error, but we differentiate between a 404
 	// and a 500
 	if r := newRelease(release); r == nil || resp.StatusCode == http.StatusNotFound {
-		return nil, ErrNotFound
+		return nil, errNotFound
 	} else if err != nil {
 		return nil, err
 	} else {

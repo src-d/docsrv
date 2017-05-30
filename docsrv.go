@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/src-d/docsrv/srv"
+	"github.com/src-d/docsrv/docsrv"
 )
 
 func main() {
