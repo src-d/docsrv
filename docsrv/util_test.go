@@ -134,7 +134,7 @@ func (m *gitHubMock) Latest(owner, project string) (*Release, error) {
 
 	sort.Sort(byTag(releases))
 	if len(releases) == 0 {
-		return nil, ErrNotFound
+		return nil, errNotFound
 	}
 
 	return releases[len(releases)-1], nil

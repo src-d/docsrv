@@ -19,21 +19,35 @@ const (
 	defaultMappingsFile = "/etc/docsrv/mappings.yml"
 )
 
+// DocSrv is the main docsrv service.
 type DocSrv struct {
-	owner        string
-	baseFolder   string
+	// defaultOwner will be used as the owner of a repository by default
+	// unless some other is specified using the mappings.yml file.
+	// This is useful if the docs will only be generated for a single org
+	// or user, since there will be no need to use the mappings.yml file
+	// at all.
+	defaultOwner string
+	// baseFolder is the root folder served by the webserver.
+	baseFolder string
+	// sharedFolder is the location of the folder with all the shared assets.
 	sharedFolder string
-	github       GitHub
-	mappings     mappings
 
-	mut            *sync.RWMutex
+	github   GitHub
+	mappings mappings
+
+	mut *sync.RWMutex
+	// latestVersions contains a map from a ${owner}/${project} to a latest
+	// version, which is a version name with the time when it was last
+	// installed.
 	latestVersions map[string]latestVersion
 
 	installMut *sync.RWMutex
-	installed  map[string]struct{}
+	// installed is a set of installed versions in the format ${owner}/${project}/${version}.
+	installed map[string]struct{}
 
 	versionMut *sync.RWMutex
-	versions   map[string][]*version
+	// versions contains a map of all versions available for a project.
+	versions map[string][]*version
 }
 
 type version struct {
@@ -115,6 +129,7 @@ func (s *DocSrv) trySetLatestVersion(owner, project, version string) {
 	}
 }
 
+// isInstalled reports whether the given project version is installed or not.
 func (s *DocSrv) isInstalled(owner, project, version string) bool {
 	key := filepath.Join(owner, project, version)
 	s.installMut.Lock()
@@ -123,6 +138,7 @@ func (s *DocSrv) isInstalled(owner, project, version string) bool {
 	return ok
 }
 
+// install marks as installed the given project version.
 func (s *DocSrv) install(owner, project, version string) {
 	key := filepath.Join(owner, project, version)
 	s.installMut.Lock()
@@ -130,6 +146,7 @@ func (s *DocSrv) install(owner, project, version string) {
 	s.installed[key] = struct{}{}
 }
 
+// projectVersions returns all the versions installed for the given project.
 func (s *DocSrv) projectVersions(owner, project string) []*version {
 	key := filepath.Join(owner, project)
 	s.versionMut.Lock()
@@ -137,6 +154,8 @@ func (s *DocSrv) projectVersions(owner, project string) []*version {
 	return s.versions[key]
 }
 
+// refreshProjectVersions retrieves all the versions available for a project
+// and caches them.
 func (s *DocSrv) refreshProjectVersions(req *http.Request, owner, project string) error {
 	releases, err := s.github.Releases(owner, project)
 	if err != nil {
@@ -159,12 +178,16 @@ func (s *DocSrv) refreshProjectVersions(req *http.Request, owner, project string
 	return nil
 }
 
+// projectInfo returns the owner and the project for the host in the given
+// http request.
+// If there is a mapping for that host, the mapping will be used. Otherwise,
+// the default owner and the project name from the host will be used.
 func (s *DocSrv) projectInfo(r *http.Request) (owner, project string) {
 	if owner, project, ok := s.mappings.forHost(r.Host); ok {
 		return owner, project
 	}
 
-	return s.owner, projectNameFromReq(r)
+	return s.defaultOwner, projectNameFromReq(r)
 }
 
 func (s *DocSrv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -179,6 +202,8 @@ func (s *DocSrv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// listVersions is an HTTP handler that will output a JSON with all the versions
+// available for a project.
 func (s *DocSrv) listVersions(w http.ResponseWriter, r *http.Request) {
 	owner, project := s.projectInfo(r)
 	versions := s.projectVersions(owner, project)
@@ -208,6 +233,8 @@ func (s *DocSrv) listVersions(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
+// redirectToLatest is an HTTP service that will redirect to the latest version
+// of the project preserving the path it had in the original request.
 func (s *DocSrv) redirectToLatest(w http.ResponseWriter, r *http.Request) {
 	owner, project := s.projectInfo(r)
 	log := logrus.WithField("project", project).
@@ -219,7 +246,7 @@ func (s *DocSrv) redirectToLatest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	latest, err := s.github.Latest(owner, project)
-	if err == ErrNotFound {
+	if err == errNotFound {
 		log.Warn("no releases found for project")
 		notFound(w, r)
 		return
@@ -233,6 +260,10 @@ func (s *DocSrv) redirectToLatest(w http.ResponseWriter, r *http.Request) {
 	redirectToVersion(w, r, latest.Tag)
 }
 
+// prepareVersion is an HTTP handler that will fetch, download and build the
+// documentation site for the specified project version if it was not already
+// built and then redirect the user to the same visit so the webserver can
+// serve the static documentation.
 func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
 	var (
 		owner, project = s.projectInfo(r)
@@ -269,7 +300,7 @@ func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	release, err := s.github.Release(owner, project, version)
-	if err == ErrNotFound {
+	if err == errNotFound {
 		notFound(w, r)
 		return
 	} else if err != nil {
