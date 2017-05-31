@@ -2,16 +2,12 @@ package srv
 
 import (
 	"context"
-	"errors"
-	"net/http"
 	"sort"
 
 	"github.com/Masterminds/semver"
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
 )
-
-var errNotFound = errors.New("unable to find a release")
 
 // Release represents a project release with a tag name and an URL to the
 // documentation asset.
@@ -22,23 +18,20 @@ type Release struct {
 	URL string
 }
 
-// GitHub is a service to retrieve information from GitHub.
-type GitHub interface {
+// releaseFetcher fetches the releases for projects.
+type releaseFetcher interface {
 	// Releases returns all the releases for a project.
 	Releases(owner, project string) ([]*Release, error)
-	// Release returns the requested release of a project.
-	Release(owner, project, tag string) (*Release, error)
-	// Latest returns the latest non-draft, non-prerelease release of a project.
-	Latest(owner, project string) (*Release, error)
 }
 
-type gitHub struct {
+type githubFetcher struct {
 	apiKey string
 	client *github.Client
 }
 
-// NewGitHub creates a new GitHub service.
-func NewGitHub(apiKey string) GitHub {
+// newReleaseFetcher creates a new release fetcher service that will fetch
+// releases from GitHub.
+func newReleaseFetcher(apiKey string) releaseFetcher {
 	var client *github.Client
 
 	if apiKey != "" {
@@ -49,24 +42,10 @@ func NewGitHub(apiKey string) GitHub {
 		client = github.NewClient(nil)
 	}
 
-	return &gitHub{apiKey, client}
+	return &githubFetcher{apiKey, client}
 }
 
-func (g *gitHub) Latest(owner, project string) (*Release, error) {
-	release, resp, err := g.client.Repositories.GetLatestRelease(context.Background(), owner, project)
-
-	// to the go-github, a 404 is an error, but we differentiate between a 404
-	// and a 500
-	if r := newRelease(release); r == nil || resp.StatusCode == http.StatusNotFound {
-		return nil, errNotFound
-	} else if err != nil {
-		return nil, err
-	} else {
-		return r, nil
-	}
-}
-
-func (g *gitHub) Releases(owner, project string) ([]*Release, error) {
+func (g *githubFetcher) Releases(owner, project string) ([]*Release, error) {
 	var result []*Release
 	page := 1
 	for {
@@ -97,25 +76,6 @@ func (g *gitHub) Releases(owner, project string) ([]*Release, error) {
 
 	sort.Sort(byTag(result))
 	return result, nil
-}
-
-func (g *gitHub) Release(owner, project, tag string) (*Release, error) {
-	release, resp, err := g.client.Repositories.GetReleaseByTag(
-		context.Background(),
-		owner,
-		project,
-		tag,
-	)
-
-	// to the go-github, a 404 is an error, but we differentiate between a 404
-	// and a 500
-	if r := newRelease(release); r == nil || resp.StatusCode == http.StatusNotFound {
-		return nil, errNotFound
-	} else if err != nil {
-		return nil, err
-	} else {
-		return r, nil
-	}
 }
 
 func newRelease(r *github.RepositoryRelease) *Release {

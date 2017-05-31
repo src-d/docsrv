@@ -1,21 +1,23 @@
 package srv
 
 import (
+	"context"
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestRedirectToLatest(t *testing.T) {
-	github := newGitHubMock()
-	srv := newTestSrv(github)
+	fetcher := newMockFetcher()
+	srv := newTestSrv(fetcher)
 	srv.defaultOwner = "org"
 
-	github.add("org", "proj1", "v1.0.0", "foo")
-	github.add("org", "proj1", "v0.9.0", "foo")
+	fetcher.add("org", "proj1", "v1.0.0", "foo")
+	fetcher.add("org", "proj1", "v0.9.0", "foo")
 
 	assertRedirect(
 		t, srv,
@@ -25,7 +27,7 @@ func TestRedirectToLatest(t *testing.T) {
 
 	// add a new version and receive the previous one because
 	// it is cached
-	github.add("org", "proj1", "v2.0.0", "baz")
+	fetcher.add("org", "proj1", "v2.0.0", "baz")
 
 	assertRedirect(
 		t, srv,
@@ -49,15 +51,15 @@ func TestRedirectToLatest(t *testing.T) {
 }
 
 func TestRedirectToLatest_WithMapping(t *testing.T) {
-	github := newGitHubMock()
-	srv := newTestSrv(github)
+	fetcher := newMockFetcher()
+	srv := newTestSrv(fetcher)
 	srv.defaultOwner = "org"
 	srv.mappings = mappings{
 		"proj1.foo.bar": "org2/proj1",
 	}
 
-	github.add("org", "proj1", "v1.0.0", "foo")
-	github.add("org2", "proj1", "v0.9.0", "foo")
+	fetcher.add("org", "proj1", "v1.0.0", "foo")
+	fetcher.add("org2", "proj1", "v0.9.0", "foo")
 
 	assertRedirect(
 		t, srv,
@@ -109,15 +111,15 @@ func TestPrepareVersion(t *testing.T) {
 	tmpDir, err := ioutil.TempDir("", "docsrv-test-")
 	require.NoError(err)
 
-	github := newGitHubMock()
-	srv := newTestSrv(github)
+	fetcher := newMockFetcher()
+	srv := newTestSrv(fetcher)
 	srv.defaultOwner = "bar"
 	srv.baseFolder = tmpDir
 	srv.sharedFolder = defaultSharedFolder
 
-	github.add("bar", "foo", "v1.0.0", url)
+	fetcher.add("bar", "foo", "v1.0.0", url)
 
-	require.Len(srv.versions["bar/foo"], 0)
+	require.Len(srv.index.projects["bar/foo"], 0)
 
 	assertRedirect(
 		t, srv,
@@ -133,21 +135,57 @@ func TestPrepareVersion(t *testing.T) {
 		"v1.0.0",
 	)
 
-	require.Len(srv.versions["bar/foo"], 1)
+	require.Len(srv.index.projects["bar/foo"], 1)
 }
 
 func TestListVersions(t *testing.T) {
-	github := newGitHubMock()
-	srv := newTestSrv(github)
+	fetcher := newMockFetcher()
+	srv := newTestSrv(fetcher)
 	srv.defaultOwner = "org"
-	github.add("org", "foo", "v1.0.0", "")
-	github.add("org", "foo", "v1.1.0", "")
-	github.add("org", "foo", "v1.2.0", "")
-	github.add("org", "bar", "v1.3.0", "")
+	fetcher.add("org", "foo", "v1.0.0", "")
+	fetcher.add("org", "foo", "v1.1.0", "")
+	fetcher.add("org", "foo", "v1.2.0", "")
+	fetcher.add("org", "bar", "v1.3.0", "")
 
 	assertJSON(t, srv, "http://foo.bar.baz/versions.json", []*version{
 		{"v1.0.0", "http://foo.bar.baz/v1.0.0"},
 		{"v1.1.0", "http://foo.bar.baz/v1.1.0"},
 		{"v1.2.0", "http://foo.bar.baz/v1.2.0"},
 	})
+}
+
+func TestManageIndex(t *testing.T) {
+	require := require.New(t)
+	fetcher := newMockFetcher()
+	srv := newTestSrv(fetcher)
+	fetcher.add("foo", "bar", "v1.0.0", "")
+	fetcher.add("foo", "bar", "v1.1.0", "")
+	fetcher.add("foo", "baz", "v1.0.0", "")
+	fetcher.add("foo", "qux", "v1.0.0", "")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-time.After(20 * time.Millisecond)
+		cancel()
+	}()
+	// in this first call there are no indexed projects, won't have anything to refresh
+	srv.ManageIndex(10*time.Millisecond, ctx)
+
+	require.Len(srv.index.projects, 0)
+
+	require.NoError(srv.indexProject("foo", "bar"))
+	require.NoError(srv.indexProject("foo", "baz"))
+	fetcher.add("foo", "bar", "v1.2.0", "")
+	fetcher.add("foo", "baz", "v1.1.0", "")
+
+	ctx, cancel = context.WithCancel(context.Background())
+	go func() {
+		<-time.After(20 * time.Millisecond)
+		cancel()
+	}()
+	// now there are projects indexed, will refresh those
+	srv.ManageIndex(10*time.Millisecond, ctx)
+	require.Len(srv.index.projects, 2)
+	require.Len(srv.index.projects[newKey("foo", "bar")], 3)
+	require.Len(srv.index.projects[newKey("foo", "baz")], 2)
 }

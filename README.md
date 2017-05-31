@@ -57,17 +57,19 @@ docker build -t docsrv .
 docker run -p 9090:9090 --name docsrv-instance \
         -e GITHUB_API_KEY="(optional) your github api key" \
         -e GITHUB_ORG="your github org/user name" \
+        -e DOCSRV_REFRESH="number of minutes between refreshes" \
         -v /path/to/host/logs:/var/log/docsrv \
         -v /path/to/error/pages:/var/www/public/errors \
         -v /path/to/init/scripts:/etc/docsrv/init.d \
         docsrv
 ```
 
-**Notes:**
-
-* The `GITHUB_ORG` will define the default user or organisation that owns the projects served by docsrv. For example, accessing `foo.yourdomain.tld` with `bar` as `GITHUB_ORG` will download and serve documentation for `https://github.com/bar/foo`.
+* The `DOCSRV_REFRESH` env variable will define how many minutes will have to pass for the service to refresh the releases of a project.
+The default value is `5` minutes.
+A higher number means less chances of getting GitHub rate limit. Unauthenticated rate is 60 reqs/hour, authenticated rate is 5000 reqs/hour, so if you have a lot of projects with a lot of releases you might want to set a higher value than the default and if you have a small amount of projects with few releases but want the refresh times to be smaller use a smaller value.
+* The `GITHUB_ORG` env variable will define the default user or organisation that owns the projects served by docsrv. For example, accessing `foo.yourdomain.tld` with `bar` as `GITHUB_ORG` will download and serve documentation for `https://github.com/bar/foo`.
 * Specific hosts can have specific repositories mapped to them. You can do so by adding a mappings file at `/etc/docsrv/mappings.yml`.
-* If not `GITHUB_API_KEY` is provided, the requests will not be authenticated. That means harder rate limits and unability to fetch private repositories.
+* If no `GITHUB_API_KEY` is provided, the requests will not be authenticated. That means harder rate limits (60 reqs / hour) and unability to fetch private repositories.
 * To override the error pages, mount a volume on `/var/www/public/errors` with `404.html` and `500.html`. If any of these two files does not exist, they will be created when the container starts. You may use assets contained in the same errors folder as if they were on the root of the site.
 * You can add custom init bash scripts by mounting a volume on `/etc/docsrv/init.d`. All `*.sh` files there will be executed. You can use this to install dependencies needed by your documentation build scripts. Take into account the container is an alpine linux.
 
