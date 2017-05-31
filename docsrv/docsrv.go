@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Masterminds/semver"
@@ -33,40 +32,10 @@ type DocSrv struct {
 	// sharedFolder is the location of the folder with all the shared assets.
 	sharedFolder string
 
-	github   releaseFetcher
+	fetcher  releaseFetcher
 	mappings mappings
-
-	mut *sync.RWMutex
-	// latestVersions contains a map from a ${owner}/${project} to a latest
-	// version, which is a version name with the time when it was last
-	// installed.
-	latestVersions map[string]latestVersion
-
-	installMut *sync.RWMutex
-	// installed is a set of installed versions in the format ${owner}/${project}/${version}.
-	installed map[string]struct{}
-
-	index *projectIndex
+	index    *projectIndex
 }
-
-type version struct {
-	Text string `json:"text"`
-	URL  string `json:"url"`
-}
-
-// latestVersion is a version name with the time it was inserted in the cache.
-type latestVersion struct {
-	cachedAt time.Time
-	version  string
-}
-
-// isExpired reports whether this version is expired or not and should be re-checked.
-func (v latestVersion) isExpired() bool {
-	return v.cachedAt.Add(latestVersionLifetime).After(time.Now())
-}
-
-// latestVersionLifetime defines the time a latest version is valid.
-const latestVersionLifetime = 1 * time.Hour
 
 // NewDocSrv creates a new `docsrv` service with the default configuration
 // and the given default organisation and github api key.
@@ -77,71 +46,13 @@ func NewDocSrv(apiKey, org string) (*DocSrv, error) {
 	}
 
 	return &DocSrv{
-		defaultOwner:   org,
-		baseFolder:     defaultBaseFolder,
-		sharedFolder:   defaultSharedFolder,
-		github:         newReleaseFetcher(apiKey, 0),
-		mappings:       mappings,
-		mut:            new(sync.RWMutex),
-		latestVersions: make(map[string]latestVersion),
-		installMut:     new(sync.RWMutex),
-		installed:      make(map[string]struct{}),
-		index:          newProjectIndex(),
+		defaultOwner: org,
+		baseFolder:   defaultBaseFolder,
+		sharedFolder: defaultSharedFolder,
+		fetcher:      newReleaseFetcher(apiKey, 0),
+		mappings:     mappings,
+		index:        newProjectIndex(),
 	}, nil
-}
-
-// setLatestVersion will set the given version as the latest version for a
-// project.
-func (s *DocSrv) setLatestVersion(owner, project, version string) {
-	key := newKey(owner, project)
-	s.mut.Lock()
-	defer s.mut.Unlock()
-	s.latestVersions[key] = latestVersion{time.Now(), version}
-}
-
-// latestVersion will return the latest version of a project and a boolean
-// reporting whether or not that version exists.
-// If the version is expired, it will return false.
-func (s *DocSrv) latestVersion(owner, project string) (string, bool) {
-	key := newKey(owner, project)
-	s.mut.Lock()
-	defer s.mut.Unlock()
-	v := s.latestVersions[key]
-	if v.isExpired() {
-		return v.version, true
-	}
-	return "", false
-}
-
-// trySetLatestVersion will set the latest version of a given project to the
-// given one only if there is a previous version and is lower than the
-// given one.
-func (s *DocSrv) trySetLatestVersion(owner, project, version string) {
-	if v, ok := s.latestVersion(owner, project); ok {
-		v1 := newVersion(v)
-		v2 := newVersion(version)
-
-		if v1.LessThan(v2) {
-			s.setLatestVersion(owner, project, version)
-		}
-	}
-}
-
-// isInstalled reports whether the given project version is installed or not.
-func (s *DocSrv) isInstalled(owner, project, version string) bool {
-	key := newKey(owner, project, version)
-	s.installMut.Lock()
-	defer s.installMut.Unlock()
-	_, ok := s.installed[key]
-	return ok
-}
-
-// install marks as installed the given project version.
-func (s *DocSrv) install(owner, project, version string) {
-	key := newKey(owner, project, version)
-	s.installMut.Lock()
-	defer s.installMut.Unlock()
-	s.installed[key] = struct{}{}
 }
 
 // ensureIndexed checks if the project is indexed and if it's not, it indexes
@@ -157,7 +68,7 @@ func (s *DocSrv) ensureIndexed(owner, project string) error {
 
 // indexProject indexes the given project.
 func (s *DocSrv) indexProject(owner, project string) error {
-	releases, err := s.github.releases(owner, project)
+	releases, err := s.fetcher.releases(owner, project)
 	if err != nil {
 		return err
 	}
@@ -236,6 +147,11 @@ func (s *DocSrv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type version struct {
+	Text string `json:"text"`
+	URL  string `json:"url"`
+}
+
 // listVersions is an HTTP handler that will output a JSON with all the versions
 // available for a project.
 func (s *DocSrv) listVersions(w http.ResponseWriter, r *http.Request) {
@@ -269,7 +185,7 @@ func (s *DocSrv) redirectToLatest(w http.ResponseWriter, r *http.Request) {
 	log := logrus.WithField("project", project).
 		WithField("owner", owner)
 
-	if v, ok := s.latestVersion(owner, project); ok {
+	if v, ok := s.index.latestVersion(owner, project); ok {
 		redirectToVersion(w, r, v)
 		return
 	}
@@ -288,7 +204,7 @@ func (s *DocSrv) redirectToLatest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	latest := releases[len(releases)-1]
-	s.setLatestVersion(owner, project, latest.tag)
+	s.index.setLatestVersion(owner, project, latest.tag)
 	redirectToVersion(w, r, latest.tag)
 }
 
@@ -311,7 +227,7 @@ func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.isInstalled(owner, project, version) {
+	if s.index.isInstalled(owner, project, version) {
 		// If the version is not a version, it's probably a file, so send just a basic 404 status
 		// code instead of the full not found page.
 		if _, err := semver.NewVersion(version); err != nil {
@@ -331,7 +247,7 @@ func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.trySetLatestVersion(owner, project, release.tag)
+	s.index.trySetLatestVersion(owner, project, release.tag)
 	host := strings.Split(r.Host, ":")[0]
 	destination := filepath.Join(s.baseFolder, host, version)
 	if err := os.MkdirAll(destination, 0740); err != nil {
@@ -355,7 +271,7 @@ func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.install(owner, project, version)
+	s.index.install(owner, project, version)
 
 	http.Redirect(w, r, r.URL.String(), http.StatusTemporaryRedirect)
 }
@@ -413,12 +329,4 @@ func reqScheme(r *http.Request) string {
 		}
 	}
 	return scheme
-}
-
-func newKey(strs ...string) string {
-	return strings.Join(strs, "/")
-}
-
-func splitKey(key string) []string {
-	return strings.Split(key, "/")
 }

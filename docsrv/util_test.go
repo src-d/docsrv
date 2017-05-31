@@ -12,7 +12,6 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"sort"
-	"sync"
 	"testing"
 	"time"
 
@@ -113,16 +112,12 @@ func (m *mockFetcher) releases(owner, project string) ([]*release, error) {
 
 func newTestSrv(fetcher releaseFetcher) *DocSrv {
 	return &DocSrv{
-		defaultOwner:   "",
-		baseFolder:     "",
-		sharedFolder:   "",
-		github:         fetcher,
-		mappings:       make(mappings),
-		mut:            new(sync.RWMutex),
-		latestVersions: make(map[string]latestVersion),
-		installMut:     new(sync.RWMutex),
-		installed:      make(map[string]struct{}),
-		index:          newProjectIndex(),
+		defaultOwner: "",
+		baseFolder:   "",
+		sharedFolder: "",
+		fetcher:      fetcher,
+		mappings:     make(mappings),
+		index:        newProjectIndex(),
 	}
 }
 
