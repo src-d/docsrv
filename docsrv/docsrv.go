@@ -80,7 +80,7 @@ func NewDocSrv(apiKey, org string) (*DocSrv, error) {
 		defaultOwner:   org,
 		baseFolder:     defaultBaseFolder,
 		sharedFolder:   defaultSharedFolder,
-		github:         newReleaseFetcher(apiKey),
+		github:         newReleaseFetcher(apiKey, 0),
 		mappings:       mappings,
 		mut:            new(sync.RWMutex),
 		latestVersions: make(map[string]latestVersion),
@@ -157,7 +157,7 @@ func (s *DocSrv) ensureIndexed(owner, project string) error {
 
 // indexProject indexes the given project.
 func (s *DocSrv) indexProject(owner, project string) error {
-	releases, err := s.github.Releases(owner, project)
+	releases, err := s.github.releases(owner, project)
 	if err != nil {
 		return err
 	}
@@ -205,8 +205,8 @@ func (s *DocSrv) projectVersions(req *http.Request, owner, project string) []*ve
 	var versions []*version
 	for _, r := range releases {
 		versions = append(versions, &version{
-			Text: r.Tag,
-			URL:  urlFor(req, r.Tag, ""),
+			Text: r.tag,
+			URL:  urlFor(req, r.tag, ""),
 		})
 	}
 	return versions
@@ -288,8 +288,8 @@ func (s *DocSrv) redirectToLatest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	latest := releases[len(releases)-1]
-	s.setLatestVersion(owner, project, latest.Tag)
-	redirectToVersion(w, r, latest.Tag)
+	s.setLatestVersion(owner, project, latest.tag)
+	redirectToVersion(w, r, latest.tag)
 }
 
 // prepareVersion is an HTTP handler that will fetch, download and build the
@@ -331,7 +331,7 @@ func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.trySetLatestVersion(owner, project, release.Tag)
+	s.trySetLatestVersion(owner, project, release.tag)
 	host := strings.Split(r.Host, ":")[0]
 	destination := filepath.Join(s.baseFolder, host, version)
 	if err := os.MkdirAll(destination, 0740); err != nil {
@@ -341,7 +341,7 @@ func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	conf := buildConfig{
-		tarballURL:   release.URL,
+		tarballURL:   release.url,
 		baseURL:      urlFor(r, version, ""),
 		destination:  destination,
 		sharedFolder: s.sharedFolder,

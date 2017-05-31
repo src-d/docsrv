@@ -76,7 +76,7 @@ func assertRedirect(t *testing.T, handler http.Handler, requestURL, expected str
 }
 
 type mockFetcher struct {
-	releases map[string]map[string]string
+	projectReleases map[string]map[string]string
 }
 
 func newMockFetcher() *mockFetcher {
@@ -87,21 +87,21 @@ func newMockFetcher() *mockFetcher {
 
 func (m *mockFetcher) add(owner, project, version, url string) {
 	key := filepath.Join(owner, project)
-	if _, ok := m.releases[key]; !ok {
-		m.releases[key] = make(map[string]string)
+	if _, ok := m.projectReleases[key]; !ok {
+		m.projectReleases[key] = make(map[string]string)
 	}
 
-	m.releases[key][version] = url
+	m.projectReleases[key][version] = url
 }
 
-func (m *mockFetcher) Releases(owner, project string) ([]*Release, error) {
+func (m *mockFetcher) releases(owner, project string) ([]*release, error) {
 	key := filepath.Join(owner, project)
-	if proj, ok := m.releases[key]; ok {
-		var releases []*Release
+	if proj, ok := m.projectReleases[key]; ok {
+		var releases []*release
 		for v, url := range proj {
-			releases = append(releases, &Release{
-				Tag: v,
-				URL: url,
+			releases = append(releases, &release{
+				tag: v,
+				url: url,
 			})
 		}
 		sort.Sort(byTag(releases))

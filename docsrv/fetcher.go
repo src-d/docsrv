@@ -9,30 +9,36 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// Release represents a project release with a tag name and an URL to the
+// release represents a project release with a tag name and an URL to the
 // documentation asset.
-type Release struct {
-	// Tag of the release.
-	Tag string
-	// URL is the URL to the .tar.gz file with the repo files.
-	URL string
+type release struct {
+	// tag of the release.
+	tag string
+	// url is the url to the .tar.gz file with the repo files.
+	url string
 }
 
 // releaseFetcher fetches the releases for projects.
 type releaseFetcher interface {
-	// Releases returns all the releases for a project.
-	Releases(owner, project string) ([]*Release, error)
+	// releases returns all the releases for a project.
+	releases(owner, project string) ([]*release, error)
 }
 
 type githubFetcher struct {
-	apiKey string
-	client *github.Client
+	apiKey  string
+	client  *github.Client
+	perPage int
 }
 
 // newReleaseFetcher creates a new release fetcher service that will fetch
 // releases from GitHub.
-func newReleaseFetcher(apiKey string) releaseFetcher {
+// Giving a `perPage` value of 0 or less will set the default perPage value,
+// which is 100 items per page.
+func newReleaseFetcher(apiKey string, perPage int) releaseFetcher {
 	var client *github.Client
+	if perPage <= 0 {
+		perPage = 100
+	}
 
 	if apiKey != "" {
 		ctx := context.Background()
@@ -42,18 +48,18 @@ func newReleaseFetcher(apiKey string) releaseFetcher {
 		client = github.NewClient(nil)
 	}
 
-	return &githubFetcher{apiKey, client}
+	return &githubFetcher{apiKey, client, perPage}
 }
 
-func (g *githubFetcher) Releases(owner, project string) ([]*Release, error) {
-	var result []*Release
+func (g *githubFetcher) releases(owner, project string) ([]*release, error) {
+	var result []*release
 	page := 1
 	for {
 		releases, resp, err := g.client.Repositories.ListReleases(
 			context.Background(),
 			owner,
 			project,
-			&github.ListOptions{Page: page, PerPage: 100},
+			&github.ListOptions{Page: page, PerPage: g.perPage},
 		)
 
 		if err != nil {
@@ -78,24 +84,24 @@ func (g *githubFetcher) Releases(owner, project string) ([]*Release, error) {
 	return result, nil
 }
 
-func newRelease(r *github.RepositoryRelease) *Release {
+func newRelease(r *github.RepositoryRelease) *release {
 	if r == nil || maybeBool(r.Draft) || maybeBool(r.Prerelease) {
 		return nil
 	}
 
-	return &Release{
-		Tag: maybeStr(r.TagName),
-		URL: maybeStr(r.TarballURL),
+	return &release{
+		tag: maybeStr(r.TagName),
+		url: maybeStr(r.TarballURL),
 	}
 }
 
-type byTag []*Release
+type byTag []*release
 
 func (b byTag) Len() int      { return len(b) }
 func (b byTag) Swap(i, j int) { b[i], b[j] = b[j], b[i] }
 func (b byTag) Less(i, j int) bool {
-	vi := newVersion(b[i].Tag)
-	vj := newVersion(b[j].Tag)
+	vi := newVersion(b[i].tag)
+	vj := newVersion(b[j].tag)
 	return vi.LessThan(vj)
 }
 

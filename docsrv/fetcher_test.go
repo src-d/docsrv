@@ -13,15 +13,15 @@ const (
 
 func TestReleases(t *testing.T) {
 	require := require.New(t)
-	fetcher := newReleaseFetcher("")
+	fetcher := newReleaseFetcher("", 1)
 
-	releases, err := fetcher.Releases(testOwner, testProject)
+	releases, err := fetcher.releases(testOwner, testProject)
 	require.NoError(err)
 
 	expected := []string{"v1.0.0", "v1.4.0", "v1.5.0"}
 	var result []string
 	for _, r := range releases {
-		result = append(result, r.Tag)
+		result = append(result, r.tag)
 	}
 
 	require.Equal(expected, result)
