@@ -1,4 +1,4 @@
-package srv
+package docsrv
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 func TestRedirectToLatest(t *testing.T) {
 	fetcher := newMockFetcher()
 	srv := newTestSrv(fetcher)
-	srv.defaultOwner = "org"
+	srv.opts.DefaultOwner = "org"
 
 	fetcher.add("org", "proj1", "v1.0.0", "foo")
 	fetcher.add("org", "proj1", "v0.9.0", "foo")
@@ -53,8 +53,8 @@ func TestRedirectToLatest(t *testing.T) {
 func TestRedirectToLatest_WithMapping(t *testing.T) {
 	fetcher := newMockFetcher()
 	srv := newTestSrv(fetcher)
-	srv.defaultOwner = "org"
-	srv.mappings = mappings{
+	srv.opts.DefaultOwner = "org"
+	srv.opts.Mappings = Mappings{
 		"proj1.foo.bar": "org2/proj1",
 	}
 
@@ -113,9 +113,9 @@ func TestPrepareVersion(t *testing.T) {
 
 	fetcher := newMockFetcher()
 	srv := newTestSrv(fetcher)
-	srv.defaultOwner = "bar"
-	srv.baseFolder = tmpDir
-	srv.sharedFolder = defaultSharedFolder
+	srv.opts.DefaultOwner = "bar"
+	srv.opts.BaseFolder = tmpDir
+	srv.opts.SharedFolder = "/etc/shared"
 
 	fetcher.add("bar", "foo", "v1.0.0", url)
 
@@ -141,7 +141,7 @@ func TestPrepareVersion(t *testing.T) {
 func TestListVersions(t *testing.T) {
 	fetcher := newMockFetcher()
 	srv := newTestSrv(fetcher)
-	srv.defaultOwner = "org"
+	srv.opts.DefaultOwner = "org"
 	fetcher.add("org", "foo", "v1.0.0", "")
 	fetcher.add("org", "foo", "v1.1.0", "")
 	fetcher.add("org", "foo", "v1.2.0", "")

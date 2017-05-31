@@ -1,4 +1,4 @@
-package srv
+package docsrv
 
 import (
 	"fmt"

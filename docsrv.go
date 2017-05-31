@@ -11,14 +11,31 @@ import (
 	"github.com/src-d/docsrv/docsrv"
 )
 
+const (
+	sharedFolder = "/etc/shared"
+	baseFolder   = "/var/www/public"
+	mappingsFile = "/etc/docsrv/mappings.yml"
+)
+
 func main() {
 	var (
 		apiKey          = os.Getenv("GITHUB_API_KEY")
-		org             = os.Getenv("GITHUB_ORG")
+		defaultOwner    = os.Getenv("GITHUB_ORG")
 		refreshInterval = getRefreshInterval()
 	)
 
-	docsrv, err := srv.NewDocSrv(apiKey, org)
+	mappings, err := docsrv.LoadMappings(mappingsFile)
+	if err != nil {
+		logrus.Fatalf("unable to load mappings: %s", err)
+	}
+
+	docsrv := docsrv.New(docsrv.Options{
+		GitHubAPIKey: apiKey,
+		DefaultOwner: defaultOwner,
+		BaseFolder:   baseFolder,
+		SharedFolder: sharedFolder,
+		Mappings:     mappings,
+	})
 	if err != nil {
 		logrus.Fatalf("unable to start a new docsrv: %s", err)
 	}

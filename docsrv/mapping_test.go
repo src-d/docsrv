@@ -1,4 +1,4 @@
-package srv
+package docsrv
 
 import (
 	"io/ioutil"
@@ -22,7 +22,7 @@ func TestForHost(t *testing.T) {
 		{"bar.bar.baz", false, "", ""},
 		{"notexists.bar.baz", false, "", ""},
 	}
-	m := mappings{
+	m := Mappings{
 		"foo.bar.baz": "foox/barx",
 		"bar.bar.baz": "something",
 		"foo.bar.haz": "so/me/th/in/g",
@@ -41,7 +41,7 @@ func TestLoadMappings(t *testing.T) {
 	f, err := ioutil.TempFile("", "mappings")
 	require.NoError(err)
 
-	expected := mappings{
+	expected := Mappings{
 		"foo": "bar/baz",
 		"bar": "baz/qux",
 	}
@@ -51,7 +51,7 @@ func TestLoadMappings(t *testing.T) {
 	_, err = f.Write(bytes)
 	require.NoError(err)
 
-	mappings, err := loadMappings(f.Name())
+	mappings, err := LoadMappings(f.Name())
 	require.NoError(err)
 
 	require.Equal(expected, mappings)

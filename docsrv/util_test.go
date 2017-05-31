@@ -1,4 +1,4 @@
-package srv
+package docsrv
 
 import (
 	"archive/tar"
@@ -110,15 +110,10 @@ func (m *mockFetcher) releases(owner, project string) ([]*release, error) {
 	return nil, nil
 }
 
-func newTestSrv(fetcher releaseFetcher) *DocSrv {
-	return &DocSrv{
-		defaultOwner: "",
-		baseFolder:   "",
-		sharedFolder: "",
-		fetcher:      fetcher,
-		mappings:     make(mappings),
-		index:        newProjectIndex(),
-	}
+func newTestSrv(fetcher releaseFetcher) *Service {
+	srv := New(Options{})
+	srv.fetcher = fetcher
+	return srv
 }
 
 func tarGzServer() (string, func()) {
