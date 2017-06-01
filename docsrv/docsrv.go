@@ -29,6 +29,9 @@ type Options struct {
 	// SharedFolder is the path to the folder used to store all the common
 	// assets for building the documentations.
 	SharedFolder string
+	// RefreshToken is a key that allows refreshing the cache before a regular
+	// refresh on a request.
+	RefreshToken string
 	// Mappings contains all the mappings between hosts and a repository
 	// in the form ${owner}/${project} (in GitHub).
 	Mappings Mappings
@@ -56,11 +59,17 @@ func New(opts Options) *Service {
 
 // ensureIndexed checks if the project is indexed and if it's not, it indexes
 // it.
-func (s *Service) ensureIndexed(owner, project string) error {
+func (s *Service) ensureIndexed(refreshToken, owner, project string) error {
+	log := logrus.WithFields(logrus.Fields{"project": project, "owner": owner})
+	if refreshToken != "" && refreshToken == s.opts.RefreshToken {
+		log.Debug("received a request with a refresh token, refreshing cache for project")
+		return s.indexProject(owner, project)
+	} else if refreshToken != "" {
+		log.Warnf("a refresh token was given, but was not correct: %s", refreshToken)
+	}
+
 	if !s.index.isIndexed(owner, project) {
-		if err := s.indexProject(owner, project); err != nil {
-			return err
-		}
+		return s.indexProject(owner, project)
 	}
 	return nil
 }
@@ -158,7 +167,7 @@ func (s *Service) listVersions(w http.ResponseWriter, r *http.Request) {
 	log := logrus.WithField("project", project).
 		WithField("owner", owner)
 
-	if err := s.ensureIndexed(owner, project); err != nil {
+	if err := s.ensureIndexed(r.URL.Query().Get("token"), owner, project); err != nil {
 		log.Error("error indexing project: %s", err)
 		internalError(w, r)
 		return
@@ -185,13 +194,8 @@ func (s *Service) redirectToLatest(w http.ResponseWriter, r *http.Request) {
 		WithField("owner", owner)
 	defer log.Debug("correctly redirected to latest version")
 
-	if v, ok := s.index.latestVersion(owner, project); ok {
-		redirectToVersion(w, r, v)
-		return
-	}
-
-	if err := s.ensureIndexed(owner, project); err != nil {
-		log.Error("error indexing project: %s", err)
+	if err := s.ensureIndexed(r.URL.Query().Get("token"), owner, project); err != nil {
+		log.Errorf("error indexing project: %s", err)
 		internalError(w, r)
 		return
 	}
@@ -204,7 +208,6 @@ func (s *Service) redirectToLatest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	latest := releases[len(releases)-1]
-	s.index.setLatestVersion(owner, project, latest.tag)
 	redirectToVersion(w, r, latest.tag)
 }
 
@@ -221,9 +224,8 @@ func (s *Service) prepareVersion(w http.ResponseWriter, r *http.Request) {
 				WithField("version", version)
 	)
 
-	log.Debug("preparing version")
-	if err := s.ensureIndexed(owner, project); err != nil {
-		log.Error("error indexing project: %s", err)
+	if err := s.ensureIndexed(r.URL.Query().Get("token"), owner, project); err != nil {
+		log.Errorf("error indexing project: %s", err)
 		internalError(w, r)
 		return
 	}
@@ -251,7 +253,6 @@ func (s *Service) prepareVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.index.trySetLatestVersion(owner, project, release.tag)
 	host := strings.Split(r.Host, ":")[0]
 	destination := filepath.Join(s.opts.BaseFolder, host, version)
 	if err := os.MkdirAll(destination, 0740); err != nil {
@@ -260,6 +261,7 @@ func (s *Service) prepareVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Debug("building documentation site")
 	conf := buildConfig{
 		tarballURL:   release.url,
 		baseURL:      urlFor(r, version, ""),
