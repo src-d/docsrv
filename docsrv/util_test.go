@@ -1,4 +1,4 @@
-package srv
+package docsrv
 
 import (
 	"archive/tar"
@@ -12,7 +12,6 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"sort"
-	"sync"
 	"testing"
 	"time"
 
@@ -75,33 +74,33 @@ func assertRedirect(t *testing.T, handler http.Handler, requestURL, expected str
 	require.Equal(t, expected, url, "wrong redirect url")
 }
 
-type gitHubMock struct {
-	releases map[string]map[string]string
+type mockFetcher struct {
+	projectReleases map[string]map[string]string
 }
 
-func newGitHubMock() *gitHubMock {
-	return &gitHubMock{
+func newMockFetcher() *mockFetcher {
+	return &mockFetcher{
 		make(map[string]map[string]string),
 	}
 }
 
-func (m *gitHubMock) add(owner, project, version, url string) {
+func (m *mockFetcher) add(owner, project, version, url string) {
 	key := filepath.Join(owner, project)
-	if _, ok := m.releases[key]; !ok {
-		m.releases[key] = make(map[string]string)
+	if _, ok := m.projectReleases[key]; !ok {
+		m.projectReleases[key] = make(map[string]string)
 	}
 
-	m.releases[key][version] = url
+	m.projectReleases[key][version] = url
 }
 
-func (m *gitHubMock) Releases(owner, project string) ([]*Release, error) {
+func (m *mockFetcher) releases(owner, project string) ([]*release, error) {
 	key := filepath.Join(owner, project)
-	if proj, ok := m.releases[key]; ok {
-		var releases []*Release
+	if proj, ok := m.projectReleases[key]; ok {
+		var releases []*release
 		for v, url := range proj {
-			releases = append(releases, &Release{
-				Tag: v,
-				URL: url,
+			releases = append(releases, &release{
+				tag: v,
+				url: url,
 			})
 		}
 		sort.Sort(byTag(releases))
@@ -111,49 +110,10 @@ func (m *gitHubMock) Releases(owner, project string) ([]*Release, error) {
 	return nil, nil
 }
 
-func (m *gitHubMock) Release(owner, project, version string) (*Release, error) {
-	key := filepath.Join(owner, project)
-	if proj, ok := m.releases[key]; ok {
-		if rel, ok := proj[version]; ok {
-			return &Release{
-				Tag: version,
-				URL: rel,
-			}, nil
-		}
-	}
-
-	return nil, fmt.Errorf("not found")
-}
-
-func (m *gitHubMock) Latest(owner, project string) (*Release, error) {
-	var releases []*Release
-	key := filepath.Join(owner, project)
-	for v, url := range m.releases[key] {
-		releases = append(releases, &Release{v, url})
-	}
-
-	sort.Sort(byTag(releases))
-	if len(releases) == 0 {
-		return nil, errNotFound
-	}
-
-	return releases[len(releases)-1], nil
-}
-
-func newTestSrv(github GitHub) *DocSrv {
-	return &DocSrv{
-		"",
-		"",
-		"",
-		github,
-		make(mappings),
-		new(sync.RWMutex),
-		make(map[string]latestVersion),
-		new(sync.RWMutex),
-		make(map[string]struct{}),
-		new(sync.RWMutex),
-		make(map[string][]*version),
-	}
+func newTestSrv(fetcher releaseFetcher) *Service {
+	srv := New(Options{})
+	srv.fetcher = fetcher
+	return srv
 }
 
 func tarGzServer() (string, func()) {

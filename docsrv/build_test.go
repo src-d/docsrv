@@ -1,4 +1,4 @@
-package srv
+package docsrv
 
 import (
 	"io/ioutil"
@@ -19,7 +19,7 @@ func TestBuildDocs(t *testing.T) {
 		tarballURL:   url,
 		baseURL:      "http://foo.bar",
 		destination:  tmpDir,
-		sharedFolder: defaultSharedFolder,
+		sharedFolder: "/etc/shared",
 		project:      "src-d",
 		owner:        "docsrv",
 		version:      "v1.2.3",

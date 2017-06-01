@@ -1,4 +1,4 @@
-package srv
+package docsrv
 
 import (
 	"fmt"
@@ -9,15 +9,15 @@ import (
 	yaml "gopkg.in/yaml.v1"
 )
 
-// mappings represents a mapping from hosts to github repositories in the
+// Mappings represents a mapping from hosts to github repositories in the
 // format "${OWNER}/${REPO_NAME}".
-type mappings map[string]string
+type Mappings map[string]string
 
 // forHost returns the owner and repo for a host and reports if such mapping
 // could be found.
 // If the mapping does not have a valid format it will act as if the mapping
 // hadn't been found.
-func (m mappings) forHost(host string) (owner, repo string, ok bool) {
+func (m Mappings) forHost(host string) (owner, repo string, ok bool) {
 	mapping, ok := m[host]
 	if !ok {
 		return "", "", false
@@ -31,9 +31,9 @@ func (m mappings) forHost(host string) (owner, repo string, ok bool) {
 	return parts[0], parts[1], true
 }
 
-// loadMappings loads the mappings at the given file.
-func loadMappings(mappingFile string) (mappings, error) {
-	var mappings = make(mappings)
+// LoadMappings loads the mappings at the given file.
+func LoadMappings(mappingFile string) (Mappings, error) {
+	var mappings = make(Mappings)
 	f, err := os.Open(mappingFile)
 	if os.IsNotExist(err) {
 		return mappings, nil

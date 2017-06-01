@@ -1,4 +1,4 @@
-package srv
+package docsrv
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/c4milo/unpackit"
@@ -33,6 +34,7 @@ type buildConfig struct {
 
 // buildDocs builds the documentation site for the given build configuration.
 func buildDocs(conf buildConfig) error {
+	start := time.Now()
 	resp, err := http.Get(conf.tarballURL)
 	if err != nil {
 		return err
@@ -49,6 +51,7 @@ func buildDocs(conf buildConfig) error {
 		return fmt.Errorf("error untarring %q: %s", conf.tarballURL, err)
 	}
 
+	startBuild := time.Now()
 	cmd := exec.Command("make", "docs")
 	cmd.Dir = dir
 	cmd.Env = append(
@@ -66,6 +69,16 @@ func buildDocs(conf buildConfig) error {
 	if err != nil {
 		return fmt.Errorf("error running `make build` of docs folder at %q: %s. Full error: %s", dir, err, string(output))
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"project":     conf.project,
+		"owner":       conf.owner,
+		"version":     conf.version,
+		"baseurl":     conf.baseURL,
+		"destination": conf.destination,
+		"total_time":  fmt.Sprint(time.Since(start)),
+		"build_time":  fmt.Sprint(time.Since(startBuild)),
+	}).Debugf("build output: %s", string(output))
 
 	if err := os.RemoveAll(dir); err != nil {
 		logrus.Warnf("could not delete temp files at %q: %s", dir, err)

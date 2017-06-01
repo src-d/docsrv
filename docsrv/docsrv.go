@@ -1,197 +1,141 @@
-package srv
+package docsrv
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Masterminds/semver"
 	"github.com/Sirupsen/logrus"
 )
 
-const (
-	defaultSharedFolder = "/etc/shared"
-	defaultBaseFolder   = "/var/www/public"
-	defaultMappingsFile = "/etc/docsrv/mappings.yml"
-)
-
-// DocSrv is the main docsrv service.
-type DocSrv struct {
-	// defaultOwner will be used as the owner of a repository by default
-	// unless some other is specified using the mappings.yml file.
-	// This is useful if the docs will only be generated for a single org
-	// or user, since there will be no need to use the mappings.yml file
-	// at all.
-	defaultOwner string
-	// baseFolder is the root folder served by the webserver.
-	baseFolder string
-	// sharedFolder is the location of the folder with all the shared assets.
-	sharedFolder string
-
-	github   GitHub
-	mappings mappings
-
-	mut *sync.RWMutex
-	// latestVersions contains a map from a ${owner}/${project} to a latest
-	// version, which is a version name with the time when it was last
-	// installed.
-	latestVersions map[string]latestVersion
-
-	installMut *sync.RWMutex
-	// installed is a set of installed versions in the format ${owner}/${project}/${version}.
-	installed map[string]struct{}
-
-	versionMut *sync.RWMutex
-	// versions contains a map of all versions available for a project.
-	versions map[string][]*version
+// Options contains all the options available for creating a new DocSrv
+// service.
+type Options struct {
+	// GitHubAPIKey is the API key used to retrieve releases from GitHub.
+	// If api key is empty the requests will be made without authentication.
+	GitHubAPIKey string
+	// DefaultOwner is the GitHub username or organization that will be used
+	// in case no mapping is found for a host. It's particularly useful if the
+	// documentations will always be for a specific organization, which would
+	// avoid requiring any mappings at all.
+	DefaultOwner string
+	// BaseFolder is the path to the root folder of the webserver.
+	BaseFolder string
+	// SharedFolder is the path to the folder used to store all the common
+	// assets for building the documentations.
+	SharedFolder string
+	// Mappings contains all the mappings between hosts and a repository
+	// in the form ${owner}/${project} (in GitHub).
+	Mappings Mappings
 }
 
-type version struct {
-	Text string `json:"text"`
-	URL  string `json:"url"`
+// Service is the main docsrv service.
+type Service struct {
+	opts    Options
+	fetcher releaseFetcher
+	index   *projectIndex
 }
 
-// latestVersion is a version name with the time it was inserted in the cache.
-type latestVersion struct {
-	cachedAt time.Time
-	version  string
-}
-
-// isExpired reports whether this version is expired or not and should be re-checked.
-func (v latestVersion) isExpired() bool {
-	return v.cachedAt.Add(latestVersionLifetime).After(time.Now())
-}
-
-// latestVersionLifetime defines the time a latest version is valid.
-const latestVersionLifetime = 1 * time.Hour
-
-// NewDocSrv creates a new `docsrv` service with the default configuration
-// and the given default organisation and github api key.
-func NewDocSrv(apiKey, org string) (*DocSrv, error) {
-	mappings, err := loadMappings(defaultMappingsFile)
-	if err != nil {
-		return nil, err
+// New creates a new DocSrv service with the given options.
+func New(opts Options) *Service {
+	if opts.Mappings == nil {
+		opts.Mappings = make(Mappings)
 	}
 
-	return &DocSrv{
-		org,
-		defaultBaseFolder,
-		defaultSharedFolder,
-		NewGitHub(apiKey),
-		mappings,
-		new(sync.RWMutex),
-		make(map[string]latestVersion),
-		new(sync.RWMutex),
-		make(map[string]struct{}),
-		new(sync.RWMutex),
-		make(map[string][]*version),
-	}, nil
-}
-
-// setLatestVersion will set the given version as the latest version for a
-// project.
-func (s *DocSrv) setLatestVersion(owner, project, version string) {
-	key := filepath.Join(owner, project)
-	s.mut.Lock()
-	defer s.mut.Unlock()
-	s.latestVersions[key] = latestVersion{time.Now(), version}
-}
-
-// latestVersion will return the latest version of a project and a boolean
-// reporting whether or not that version exists.
-// If the version is expired, it will return false.
-func (s *DocSrv) latestVersion(owner, project string) (string, bool) {
-	key := filepath.Join(owner, project)
-	s.mut.Lock()
-	defer s.mut.Unlock()
-	v := s.latestVersions[key]
-	if v.isExpired() {
-		return v.version, true
+	return &Service{
+		opts:    opts,
+		fetcher: newReleaseFetcher(opts.GitHubAPIKey, 0),
+		index:   newProjectIndex(),
 	}
-	return "", false
 }
 
-// trySetLatestVersion will set the latest version of a given project to the
-// given one only if there is a previous version and is lower than the
-// given one.
-func (s *DocSrv) trySetLatestVersion(owner, project, version string) {
-	if v, ok := s.latestVersion(owner, project); ok {
-		v1 := newVersion(v)
-		v2 := newVersion(version)
-
-		if v1.LessThan(v2) {
-			s.setLatestVersion(owner, project, version)
+// ensureIndexed checks if the project is indexed and if it's not, it indexes
+// it.
+func (s *Service) ensureIndexed(owner, project string) error {
+	if !s.index.isIndexed(owner, project) {
+		if err := s.indexProject(owner, project); err != nil {
+			return err
 		}
 	}
+	return nil
 }
 
-// isInstalled reports whether the given project version is installed or not.
-func (s *DocSrv) isInstalled(owner, project, version string) bool {
-	key := filepath.Join(owner, project, version)
-	s.installMut.Lock()
-	defer s.installMut.Unlock()
-	_, ok := s.installed[key]
-	return ok
-}
-
-// install marks as installed the given project version.
-func (s *DocSrv) install(owner, project, version string) {
-	key := filepath.Join(owner, project, version)
-	s.installMut.Lock()
-	defer s.installMut.Unlock()
-	s.installed[key] = struct{}{}
-}
-
-// projectVersions returns all the versions installed for the given project.
-func (s *DocSrv) projectVersions(owner, project string) []*version {
-	key := filepath.Join(owner, project)
-	s.versionMut.Lock()
-	defer s.versionMut.Unlock()
-	return s.versions[key]
-}
-
-// refreshProjectVersions retrieves all the versions available for a project
-// and caches them.
-func (s *DocSrv) refreshProjectVersions(req *http.Request, owner, project string) error {
-	releases, err := s.github.Releases(owner, project)
+// indexProject indexes the given project.
+func (s *Service) indexProject(owner, project string) error {
+	releases, err := s.fetcher.releases(owner, project)
 	if err != nil {
 		return err
 	}
 
-	versions := []*version{}
+	s.index.set(owner, project, releases)
+	return nil
+}
+
+// refreshIndex refreshes the version index of the projects already installed.
+func (s *Service) refreshIndex() {
+	for _, key := range s.index.getProjects() {
+		parts := splitKey(key)
+		if len(parts) != 2 {
+			logrus.WithField("key", key).Error("not a valid project key")
+			continue
+		}
+		owner, project := parts[0], parts[1]
+
+		err := s.indexProject(owner, project)
+		if err != nil {
+			logrus.WithField("owner", owner).
+				WithField("project", project).
+				Errorf("error refreshing project: %s", err)
+		}
+	}
+}
+
+// ManageIndex is in charge of refreshing the index of projects every
+// five minutes until the given context is cancelled.
+func (s *Service) ManageIndex(refreshInterval time.Duration, ctx context.Context) {
+	for {
+		select {
+		case <-time.After(refreshInterval):
+			s.refreshIndex()
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// projectVersions returns all the versions available for the given project.
+func (s *Service) projectVersions(req *http.Request, owner, project string) []*version {
+	releases := s.index.forProject(owner, project)
+	var versions []*version
 	for _, r := range releases {
 		versions = append(versions, &version{
-			Text: r.Tag,
-			URL:  urlFor(req, r.Tag, ""),
+			Text: r.tag,
+			URL:  urlFor(req, r.tag, ""),
 		})
 	}
-
-	s.versionMut.Lock()
-	defer s.versionMut.Unlock()
-
-	key := filepath.Join(owner, project)
-	s.versions[key] = versions
-	return nil
+	return versions
 }
 
 // projectInfo returns the owner and the project for the host in the given
 // http request.
 // If there is a mapping for that host, the mapping will be used. Otherwise,
 // the default owner and the project name from the host will be used.
-func (s *DocSrv) projectInfo(r *http.Request) (owner, project string) {
-	if owner, project, ok := s.mappings.forHost(r.Host); ok {
+func (s *Service) projectInfo(r *http.Request) (owner, project string) {
+	if owner, project, ok := s.opts.Mappings.forHost(r.Host); ok {
 		return owner, project
 	}
 
-	return s.defaultOwner, projectNameFromReq(r)
+	return s.opts.DefaultOwner, projectNameFromReq(r)
 }
 
-func (s *DocSrv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer recoverFromPanic(w, r)
+	logrus.WithField("path", r.URL.Path).Debug("new request received")
 
 	if r.URL.Path == "/versions.json" {
 		s.listVersions(w, r)
@@ -202,25 +146,25 @@ func (s *DocSrv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type version struct {
+	Text string `json:"text"`
+	URL  string `json:"url"`
+}
+
 // listVersions is an HTTP handler that will output a JSON with all the versions
 // available for a project.
-func (s *DocSrv) listVersions(w http.ResponseWriter, r *http.Request) {
+func (s *Service) listVersions(w http.ResponseWriter, r *http.Request) {
 	owner, project := s.projectInfo(r)
-	versions := s.projectVersions(owner, project)
 	log := logrus.WithField("project", project).
 		WithField("owner", owner)
 
-	// if versions is nil, project versions haven't been refreshed yet
-	// so refresh them and then serve them
-	if versions == nil {
-		if err := s.refreshProjectVersions(r, owner, project); err != nil {
-			log.Errorf("error refreshing project versions: %s", err)
-			internalError(w, r)
-			return
-		}
-
-		versions = s.projectVersions(owner, project)
+	if err := s.ensureIndexed(owner, project); err != nil {
+		log.Error("error indexing project: %s", err)
+		internalError(w, r)
+		return
 	}
+
+	versions := s.projectVersions(r, owner, project)
 
 	data, err := json.Marshal(versions)
 	if err != nil {
@@ -235,36 +179,40 @@ func (s *DocSrv) listVersions(w http.ResponseWriter, r *http.Request) {
 
 // redirectToLatest is an HTTP service that will redirect to the latest version
 // of the project preserving the path it had in the original request.
-func (s *DocSrv) redirectToLatest(w http.ResponseWriter, r *http.Request) {
+func (s *Service) redirectToLatest(w http.ResponseWriter, r *http.Request) {
 	owner, project := s.projectInfo(r)
 	log := logrus.WithField("project", project).
 		WithField("owner", owner)
+	defer log.Debug("correctly redirected to latest version")
 
-	if v, ok := s.latestVersion(owner, project); ok {
+	if v, ok := s.index.latestVersion(owner, project); ok {
 		redirectToVersion(w, r, v)
 		return
 	}
 
-	latest, err := s.github.Latest(owner, project)
-	if err == errNotFound {
-		log.Warn("no releases found for project")
-		notFound(w, r)
-		return
-	} else if err != nil {
-		log.Errorf("could not find latest release for project: %s", err)
+	if err := s.ensureIndexed(owner, project); err != nil {
+		log.Error("error indexing project: %s", err)
 		internalError(w, r)
 		return
 	}
 
-	s.setLatestVersion(owner, project, latest.Tag)
-	redirectToVersion(w, r, latest.Tag)
+	releases := s.index.forProject(owner, project)
+	if len(releases) == 0 {
+		log.Warn("no releases found for project")
+		notFound(w, r)
+		return
+	}
+
+	latest := releases[len(releases)-1]
+	s.index.setLatestVersion(owner, project, latest.tag)
+	redirectToVersion(w, r, latest.tag)
 }
 
 // prepareVersion is an HTTP handler that will fetch, download and build the
 // documentation site for the specified project version if it was not already
 // built and then redirect the user to the same visit so the webserver can
 // serve the static documentation.
-func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
+func (s *Service) prepareVersion(w http.ResponseWriter, r *http.Request) {
 	var (
 		owner, project = s.projectInfo(r)
 		version        = versionFromReq(r)
@@ -273,7 +221,14 @@ func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
 				WithField("version", version)
 	)
 
-	if s.isInstalled(owner, project, version) {
+	log.Debug("preparing version")
+	if err := s.ensureIndexed(owner, project); err != nil {
+		log.Error("error indexing project: %s", err)
+		internalError(w, r)
+		return
+	}
+
+	if s.index.isInstalled(owner, project, version) {
 		// If the version is not a version, it's probably a file, so send just a basic 404 status
 		// code instead of the full not found page.
 		if _, err := semver.NewVersion(version); err != nil {
@@ -281,37 +236,24 @@ func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		log.Debug("release was already installed but the request made it to docsrv and not the webserver")
+
 		// if docs for this version are installed but the request made it here
 		// it means the document being requested does not exist.
 		notFound(w, r)
 		return
 	}
 
-	// refresh project versions in parallel to not block the other expensive
-	// operation: actually downloading and building the docs.
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		if err := s.refreshProjectVersions(r, owner, project); err != nil {
-			log.Error(err.Error())
-		}
-
-		wg.Done()
-	}()
-
-	release, err := s.github.Release(owner, project, version)
-	if err == errNotFound {
+	release := s.index.get(owner, project, version)
+	if release == nil {
+		log.Debug("release was not found")
 		notFound(w, r)
-		return
-	} else if err != nil {
-		log.Errorf("could not find release for project: %s", err)
-		internalError(w, r)
 		return
 	}
 
-	s.trySetLatestVersion(owner, project, release.Tag)
+	s.index.trySetLatestVersion(owner, project, release.tag)
 	host := strings.Split(r.Host, ":")[0]
-	destination := filepath.Join(s.baseFolder, host, version)
+	destination := filepath.Join(s.opts.BaseFolder, host, version)
 	if err := os.MkdirAll(destination, 0740); err != nil {
 		log.Errorf("could not build folder structure for project %s: %s", project, err)
 		internalError(w, r)
@@ -319,10 +261,10 @@ func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	conf := buildConfig{
-		tarballURL:   release.URL,
+		tarballURL:   release.url,
 		baseURL:      urlFor(r, version, ""),
 		destination:  destination,
-		sharedFolder: s.sharedFolder,
+		sharedFolder: s.opts.SharedFolder,
 		version:      version,
 		project:      project,
 		owner:        owner,
@@ -333,9 +275,9 @@ func (s *DocSrv) prepareVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wg.Wait()
-	s.install(owner, project, version)
+	s.index.install(owner, project, version)
 
+	log.Debug("version successfully installed and prepared")
 	http.Redirect(w, r, r.URL.String(), http.StatusTemporaryRedirect)
 }
 
