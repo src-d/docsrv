@@ -76,8 +76,7 @@ func (s *Service) indexProject(owner, project string) error {
 	return nil
 }
 
-// refreshIndex refreshes the version index of the projects already
-// installed.
+// refreshIndex refreshes the version index of the projects already installed.
 func (s *Service) refreshIndex() {
 	for _, key := range s.index.getProjects() {
 		parts := splitKey(key)
