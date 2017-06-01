@@ -21,8 +21,13 @@ func main() {
 	var (
 		apiKey          = os.Getenv("GITHUB_API_KEY")
 		defaultOwner    = os.Getenv("GITHUB_ORG")
+		debug           = os.Getenv("DEBUG_LOG") != ""
 		refreshInterval = getRefreshInterval()
 	)
+
+	if debug {
+		logrus.SetLevel(logrus.DebugLevel)
+	}
 
 	mappings, err := docsrv.LoadMappings(mappingsFile)
 	if err != nil {

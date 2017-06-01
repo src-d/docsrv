@@ -136,6 +136,7 @@ func (s *Service) projectInfo(r *http.Request) (owner, project string) {
 
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer recoverFromPanic(w, r)
+	logrus.WithField("path", r.URL.Path).Debug("new request received")
 
 	if r.URL.Path == "/versions.json" {
 		s.listVersions(w, r)
@@ -183,6 +184,7 @@ func (s *Service) redirectToLatest(w http.ResponseWriter, r *http.Request) {
 	owner, project := s.projectInfo(r)
 	log := logrus.WithField("project", project).
 		WithField("owner", owner)
+	defer log.Debug("correctly redirected to latest version")
 
 	if v, ok := s.index.latestVersion(owner, project); ok {
 		redirectToVersion(w, r, v)
@@ -220,6 +222,7 @@ func (s *Service) prepareVersion(w http.ResponseWriter, r *http.Request) {
 				WithField("version", version)
 	)
 
+	log.Debug("preparing version")
 	if err := s.ensureIndexed(owner, project); err != nil {
 		log.Error("error indexing project: %s", err)
 		internalError(w, r)
@@ -234,6 +237,8 @@ func (s *Service) prepareVersion(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		log.Debug("release was already installed but the request made it to docsrv and not the webserver")
+
 		// if docs for this version are installed but the request made it here
 		// it means the document being requested does not exist.
 		notFound(w, r)
@@ -242,6 +247,7 @@ func (s *Service) prepareVersion(w http.ResponseWriter, r *http.Request) {
 
 	release := s.index.get(owner, project, version)
 	if release == nil {
+		log.Debug("release was not found")
 		notFound(w, r)
 		return
 	}
@@ -272,6 +278,7 @@ func (s *Service) prepareVersion(w http.ResponseWriter, r *http.Request) {
 
 	s.index.install(owner, project, version)
 
+	log.Debug("version successfully installed and prepared")
 	http.Redirect(w, r, r.URL.String(), http.StatusTemporaryRedirect)
 }
 

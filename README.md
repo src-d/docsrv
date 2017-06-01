@@ -58,12 +58,14 @@ docker run -p 9090:9090 --name docsrv-instance \
         -e GITHUB_API_KEY="(optional) your github api key" \
         -e GITHUB_ORG="your github org/user name" \
         -e DOCSRV_REFRESH="number of minutes between refreshes" \
+        -e DEBUG_LOG=true \
         -v /path/to/host/logs:/var/log/docsrv \
         -v /path/to/error/pages:/var/www/public/errors \
         -v /path/to/init/scripts:/etc/docsrv/init.d \
         docsrv
 ```
 
+* The `DEBUG_LOG` env variable will output the really, really verbose messages on the log file.
 * The `DOCSRV_REFRESH` env variable will define how many minutes will have to pass for the service to refresh the releases of a project.
 The default value is `5` minutes.
 A higher number means less chances of getting GitHub rate limit. Unauthenticated rate is 60 reqs/hour, authenticated rate is 5000 reqs/hour, so if you have a lot of projects with a lot of releases you might want to set a higher value than the default and if you have a small amount of projects with few releases but want the refresh times to be smaller use a smaller value.
