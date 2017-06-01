@@ -22,6 +22,7 @@ func main() {
 		apiKey          = os.Getenv("GITHUB_API_KEY")
 		defaultOwner    = os.Getenv("GITHUB_ORG")
 		debug           = os.Getenv("DEBUG_LOG") != ""
+		refreshToken    = os.Getenv("REFRESH_TOKEN")
 		refreshInterval = getRefreshInterval()
 	)
 
@@ -39,6 +40,7 @@ func main() {
 		DefaultOwner: defaultOwner,
 		BaseFolder:   baseFolder,
 		SharedFolder: sharedFolder,
+		RefreshToken: refreshToken,
 		Mappings:     mappings,
 	})
 	if err != nil {

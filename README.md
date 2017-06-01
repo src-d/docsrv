@@ -57,15 +57,16 @@ docker build -t docsrv .
 docker run -p 9090:9090 --name docsrv-instance \
         -e GITHUB_API_KEY="(optional) your github api key" \
         -e GITHUB_ORG="your github org/user name" \
-        -e DOCSRV_REFRESH="number of minutes between refreshes" \
-        -e DEBUG_LOG=true \
+        -e DOCSRV_REFRESH="(optional) number of minutes between refreshes" \
+        -e DEBUG_LOG="(optional) true" \
+        -e REFRESH_TOKEN="(optional) your_token" \
         -v /path/to/host/logs:/var/log/docsrv \
         -v /path/to/error/pages:/var/www/public/errors \
         -v /path/to/init/scripts:/etc/docsrv/init.d \
         docsrv
 ```
 
-* The `DEBUG_LOG` env variable will output the really, really verbose messages on the log file.
+* The `DEBUG_LOG` env variable will output the really, really verbose messages on the log file. This is not enabled by default.
 * The `DOCSRV_REFRESH` env variable will define how many minutes will have to pass for the service to refresh the releases of a project.
 The default value is `5` minutes.
 A higher number means less chances of getting GitHub rate limit. Unauthenticated rate is 60 reqs/hour, authenticated rate is 5000 reqs/hour, so if you have a lot of projects with a lot of releases you might want to set a higher value than the default and if you have a small amount of projects with few releases but want the refresh times to be smaller use a smaller value.
@@ -74,6 +75,7 @@ A higher number means less chances of getting GitHub rate limit. Unauthenticated
 * If no `GITHUB_API_KEY` is provided, the requests will not be authenticated. That means harder rate limits (60 reqs / hour) and unability to fetch private repositories.
 * To override the error pages, mount a volume on `/var/www/public/errors` with `404.html` and `500.html`. If any of these two files does not exist, they will be created when the container starts. You may use assets contained in the same errors folder as if they were on the root of the site.
 * You can add custom init bash scripts by mounting a volume on `/etc/docsrv/init.d`. All `*.sh` files there will be executed. You can use this to install dependencies needed by your documentation build scripts. Take into account the container is an alpine linux.
+* `REFRESH_TOKEN` can be used to enable refreshes of the cache before the time specified in `REFRESH_INTERVAL`. If your documentation takes a lot to build you probably want to build it ahead of time and leave it cached for your users so they don't have to wait for it to build. This mechanism is meant to be used in a CI when you make a release. Just ping `http://project.yourdomain.tld/refresh/${VERSION}/?token=${YOUR REFRESH TOKEN}` and the cache will be refreshed and this version built.
 
 ### Mappings file
 

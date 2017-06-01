@@ -68,6 +68,22 @@ func TestRedirectToLatest_WithMapping(t *testing.T) {
 	)
 }
 
+func TestRedirectToLatest_RefreshToken(t *testing.T) {
+	fetcher := newMockFetcher()
+	srv := newTestSrv(fetcher)
+	srv.opts.RefreshToken = "foo"
+	srv.opts.DefaultOwner = "org"
+	fetcher.add("org", "proj1", "v1.0.0", "foo")
+	require.NoError(t, srv.indexProject("org", "proj1"))
+	fetcher.add("org", "proj1", "v1.1.0", "foo")
+
+	assertRedirect(
+		t, srv,
+		"http://proj1.foo.bar/latest/?token=foo",
+		"http://proj1.foo.bar/v1.1.0/",
+	)
+}
+
 func TestProjectNameFromReq(t *testing.T) {
 	cases := []struct {
 		url      string
@@ -136,6 +152,44 @@ func TestPrepareVersion(t *testing.T) {
 	)
 
 	require.Len(srv.index.projects["bar/foo"], 1)
+}
+
+func TestPrepareVersion_RefreshToken(t *testing.T) {
+	require := require.New(t)
+	url, close := tarGzServer()
+	defer close()
+
+	tmpDir, err := ioutil.TempDir("", "docsrv-test-")
+	require.NoError(err)
+
+	fetcher := newMockFetcher()
+	srv := newTestSrv(fetcher)
+	srv.opts.DefaultOwner = "bar"
+	srv.opts.BaseFolder = tmpDir
+	srv.opts.SharedFolder = "/etc/shared"
+	srv.opts.RefreshToken = "refresh"
+
+	fetcher.add("bar", "foo", "v1.0.0", url)
+
+	require.Len(srv.index.projects["bar/foo"], 0)
+
+	assertRedirect(
+		t, srv,
+		"http://foo.bar.baz/v1.0.0/something",
+		"http://foo.bar.baz/v1.0.0/something",
+	)
+
+	fetcher.add("bar", "foo", "v1.1.0", url)
+
+	// without refresh token it's not updated
+	assertRedirect(t, srv, "http://foo.bar.baz/v1.1.0/", "/404.html")
+
+	// with refresh token it's updated
+	assertRedirect(
+		t, srv,
+		"http://foo.bar.baz/v1.1.0/?token=refresh",
+		"http://foo.bar.baz/v1.1.0/?token=refresh",
+	)
 }
 
 func TestListVersions(t *testing.T) {
