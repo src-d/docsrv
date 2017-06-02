@@ -145,7 +145,7 @@ func TestPrepareVersion(t *testing.T) {
 
 	assertMakefileOutput(t,
 		filepath.Join(tmpDir, "foo.bar.baz", "v1.0.0"),
-		"http://foo.bar.baz/v1.0.0",
+		"http://foo.bar.baz/v1.0.0/",
 		"foo",
 		"bar",
 		"v1.0.0",

@@ -264,7 +264,7 @@ func (s *Service) prepareVersion(w http.ResponseWriter, r *http.Request) {
 	log.Debug("building documentation site")
 	conf := buildConfig{
 		tarballURL:   release.url,
-		baseURL:      urlFor(r, version, ""),
+		baseURL:      urlFor(r, version, "") + "/",
 		destination:  destination,
 		sharedFolder: s.opts.SharedFolder,
 		version:      version,
