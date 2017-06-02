@@ -112,3 +112,4 @@ Then mount it as a volume using `-v /path/to/mydir:/etc/docsrv` and `-v /path/to
 1. `/versions.json` without any version has the highest precedence.
 2. `/` without any version has the second highest predecence and acts as if it was `/latest/`.
 3. `/$VERSION/$PATH` has the lowest precedence.
+4. `/var/www/public/errors/$PATH`
