@@ -46,7 +46,7 @@ func TestRedirectToLatest(t *testing.T) {
 	assertRedirect(
 		t, srv,
 		"http://proj2.foo.bar/latest/",
-		"/404.html",
+		"http://proj2.foo.bar/404/",
 	)
 }
 
@@ -182,7 +182,7 @@ func TestPrepareVersion_RefreshToken(t *testing.T) {
 	fetcher.add("bar", "foo", "v1.1.0", url)
 
 	// without refresh token it's not updated
-	assertRedirect(t, srv, "http://foo.bar.baz/v1.1.0/", "/404.html")
+	assertRedirect(t, srv, "http://foo.bar.baz/v1.1.0/", "http://foo.bar.baz/404/")
 
 	// with refresh token it's updated
 	assertRedirect(
