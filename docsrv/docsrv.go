@@ -3,6 +3,7 @@ package docsrv
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -291,11 +292,13 @@ func ensureEndingSlash(url string) string {
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/404.html", http.StatusTemporaryRedirect)
+	url := fmt.Sprintf("%s://%s/404/", reqScheme(r), r.Host)
+	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
 func internalError(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/500.html", http.StatusTemporaryRedirect)
+	url := fmt.Sprintf("%s://%s/500/", reqScheme(r), r.Host)
+	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
 func redirectToVersion(w http.ResponseWriter, r *http.Request, version string) {
