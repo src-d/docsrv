@@ -13,7 +13,7 @@ import (
 // Config is a map from hosts to project configurations.
 type Config map[string]ProjectConfig
 
-// ProjectForHost will returne the owner and repository name of the project
+// ProjectForHost will returns the owner and repository name of the project
 // in the given host. Will also report whether or not the project could be found
 // with a boolean.
 func (c Config) ProjectForHost(host string) (owner, repo string, ok bool) {
