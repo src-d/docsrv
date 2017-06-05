@@ -180,6 +180,7 @@ func (s *Service) listVersions(w http.ResponseWriter, r *http.Request) {
 func (s *Service) redirectToLatest(w http.ResponseWriter, r *http.Request) {
 	owner, project, ok := s.opts.Config.ProjectForHost(r.Host)
 	if !ok {
+		logrus.Warnf("could not find suitable project config for host: %s", r.Host)
 		notFound(w, r)
 		return
 	}

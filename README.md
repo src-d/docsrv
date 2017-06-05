@@ -92,6 +92,8 @@ Example `config.toml`
   min-version = "v1.0.0"
 ```
 
+The host name must **not** contain the port.
+
 The project configurations available for each host are `repository`, which is the GitHub repository whose docs will be served in that host in the format `${OWNER}/${PROJECT}` and `min-version`, the minimum version of the project for which docs can be built.
 
 ### Recommended way to use and deploy docsrv

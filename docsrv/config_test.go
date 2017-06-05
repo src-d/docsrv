@@ -25,6 +25,7 @@ func TestProjectForHost(t *testing.T) {
 		{"foo.bar.baz", "", "", false},
 		{"bar.bar.baz", "", "", false},
 		{"baz.bar.baz", "foo", "bar", true},
+		{"baz.bar.baz:9090", "foo", "bar", true},
 		{"qux.bar.baz", "", "", false},
 		{"mux.bar.baz", "", "", false},
 	}
@@ -52,6 +53,7 @@ func TestMinVersionForHost(t *testing.T) {
 		{"foo.bar.baz", ""},
 		{"bar.bar.baz", ""},
 		{"baz.bar.baz", "v1.0.0"},
+		{"baz.bar.baz:9090", "v1.0.0"},
 		{"qux.bar.baz", ""},
 	}
 
@@ -78,4 +80,17 @@ func TestLoadConfig(t *testing.T) {
 	require.NoError(err)
 
 	require.Equal(expected, config)
+}
+
+func TestStripPort(t *testing.T) {
+	cases := []struct {
+		in, out string
+	}{
+		{"foo.bar.baz", "foo.bar.baz"},
+		{"foo.bar.baz:9090", "foo.bar.baz"},
+	}
+
+	for _, c := range cases {
+		require.Equal(t, c.out, stripPort(c.in), c.in)
+	}
 }
