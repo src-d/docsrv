@@ -16,8 +16,9 @@ type Config map[string]ProjectConfig
 // ProjectForHost will returns the owner and repository name of the project
 // in the given host. Will also report whether or not the project could be found
 // with a boolean.
+// The host will have its port, if any, stripped.
 func (c Config) ProjectForHost(host string) (owner, repo string, ok bool) {
-	proj, ok := c[host]
+	proj, ok := c[stripPort(host)]
 	if !ok {
 		return "", "", false
 	}
@@ -34,8 +35,9 @@ func (c Config) ProjectForHost(host string) (owner, repo string, ok bool) {
 // given host.
 // It will return nil if no such host can be found or if the version is not
 // valid or is missing.
+// The host will have its port, if any, stripped.
 func (c Config) MinVersionForHost(host string) *semver.Version {
-	project, ok := c[host]
+	project, ok := c[stripPort(host)]
 	if !ok {
 		return nil
 	}
@@ -67,4 +69,15 @@ func LoadConfig(file string) (Config, error) {
 	}
 
 	return config, nil
+}
+
+func stripPort(hostport string) string {
+	colon := strings.IndexByte(hostport, ':')
+	if colon == -1 {
+		return hostport
+	}
+	if i := strings.IndexByte(hostport, ']'); i != -1 {
+		return strings.TrimPrefix(hostport[:i], "[")
+	}
+	return hostport[:colon]
 }
