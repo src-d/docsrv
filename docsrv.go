@@ -14,13 +14,12 @@ import (
 const (
 	sharedFolder = "/etc/shared"
 	baseFolder   = "/var/www/public"
-	mappingsFile = "/etc/docsrv/mappings.yml"
+	configFile   = "/etc/docsrv/conf.d/config.toml"
 )
 
 func main() {
 	var (
 		apiKey          = os.Getenv("GITHUB_API_KEY")
-		defaultOwner    = os.Getenv("GITHUB_ORG")
 		debug           = os.Getenv("DEBUG_LOG") != ""
 		refreshToken    = os.Getenv("REFRESH_TOKEN")
 		refreshInterval = getRefreshInterval()
@@ -30,18 +29,21 @@ func main() {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 
-	mappings, err := docsrv.LoadMappings(mappingsFile)
+	config, err := docsrv.LoadConfig(configFile)
 	if err != nil {
-		logrus.Fatalf("unable to load mappings: %s", err)
+		logrus.Fatalf("unable to load config: %s", err)
+	}
+
+	if len(config) == 0 {
+		logrus.Fatalf("there are no hosts configured in %s", configFile)
 	}
 
 	docsrv := docsrv.New(docsrv.Options{
 		GitHubAPIKey: apiKey,
-		DefaultOwner: defaultOwner,
 		BaseFolder:   baseFolder,
 		SharedFolder: sharedFolder,
 		RefreshToken: refreshToken,
-		Mappings:     mappings,
+		Config:       config,
 	})
 	if err != nil {
 		logrus.Fatalf("unable to start a new docsrv: %s", err)

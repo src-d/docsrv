@@ -20,11 +20,6 @@ type Options struct {
 	// GitHubAPIKey is the API key used to retrieve releases from GitHub.
 	// If api key is empty the requests will be made without authentication.
 	GitHubAPIKey string
-	// DefaultOwner is the GitHub username or organization that will be used
-	// in case no mapping is found for a host. It's particularly useful if the
-	// documentations will always be for a specific organization, which would
-	// avoid requiring any mappings at all.
-	DefaultOwner string
 	// BaseFolder is the path to the root folder of the webserver.
 	BaseFolder string
 	// SharedFolder is the path to the folder used to store all the common
@@ -33,9 +28,8 @@ type Options struct {
 	// RefreshToken is a key that allows refreshing the cache before a regular
 	// refresh on a request.
 	RefreshToken string
-	// Mappings contains all the mappings between hosts and a repository
-	// in the form ${owner}/${project} (in GitHub).
-	Mappings Mappings
+	// Config is a mapping between hosts and project configurations.
+	Config Config
 }
 
 // Service is the main docsrv service.
@@ -47,14 +41,14 @@ type Service struct {
 
 // New creates a new DocSrv service with the given options.
 func New(opts Options) *Service {
-	if opts.Mappings == nil {
-		opts.Mappings = make(Mappings)
+	if opts.Config == nil {
+		opts.Config = make(Config)
 	}
 
 	return &Service{
 		opts:    opts,
 		fetcher: newReleaseFetcher(opts.GitHubAPIKey, 0),
-		index:   newProjectIndex(),
+		index:   newProjectIndex(opts.Config),
 	}
 }
 
@@ -77,7 +71,8 @@ func (s *Service) ensureIndexed(refreshToken, owner, project string) error {
 
 // indexProject indexes the given project.
 func (s *Service) indexProject(owner, project string) error {
-	releases, err := s.fetcher.releases(owner, project)
+	minVersion := s.index.minVersion(owner, project)
+	releases, err := s.fetcher.releases(owner, project, minVersion)
 	if err != nil {
 		return err
 	}
@@ -131,18 +126,6 @@ func (s *Service) projectVersions(req *http.Request, owner, project string) []*v
 	return versions
 }
 
-// projectInfo returns the owner and the project for the host in the given
-// http request.
-// If there is a mapping for that host, the mapping will be used. Otherwise,
-// the default owner and the project name from the host will be used.
-func (s *Service) projectInfo(r *http.Request) (owner, project string) {
-	if owner, project, ok := s.opts.Mappings.forHost(r.Host); ok {
-		return owner, project
-	}
-
-	return s.opts.DefaultOwner, projectNameFromReq(r)
-}
-
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer recoverFromPanic(w, r)
 	logrus.WithField("path", r.URL.Path).Debug("new request received")
@@ -164,7 +147,12 @@ type version struct {
 // listVersions is an HTTP handler that will output a JSON with all the versions
 // available for a project.
 func (s *Service) listVersions(w http.ResponseWriter, r *http.Request) {
-	owner, project := s.projectInfo(r)
+	owner, project, ok := s.opts.Config.ProjectForHost(r.Host)
+	if !ok {
+		notFound(w, r)
+		return
+	}
+
 	log := logrus.WithField("project", project).
 		WithField("owner", owner)
 
@@ -190,7 +178,12 @@ func (s *Service) listVersions(w http.ResponseWriter, r *http.Request) {
 // redirectToLatest is an HTTP service that will redirect to the latest version
 // of the project preserving the path it had in the original request.
 func (s *Service) redirectToLatest(w http.ResponseWriter, r *http.Request) {
-	owner, project := s.projectInfo(r)
+	owner, project, ok := s.opts.Config.ProjectForHost(r.Host)
+	if !ok {
+		notFound(w, r)
+		return
+	}
+
 	log := logrus.WithField("project", project).
 		WithField("owner", owner)
 	defer log.Debug("correctly redirected to latest version")
@@ -217,12 +210,17 @@ func (s *Service) redirectToLatest(w http.ResponseWriter, r *http.Request) {
 // built and then redirect the user to the same visit so the webserver can
 // serve the static documentation.
 func (s *Service) prepareVersion(w http.ResponseWriter, r *http.Request) {
+	owner, project, ok := s.opts.Config.ProjectForHost(r.Host)
+	if !ok {
+		notFound(w, r)
+		return
+	}
+
 	var (
-		owner, project = s.projectInfo(r)
-		version        = versionFromReq(r)
-		log            = logrus.WithField("project", project).
-				WithField("owner", owner).
-				WithField("version", version)
+		version = versionFromReq(r)
+		log     = logrus.WithField("project", project).
+			WithField("owner", owner).
+			WithField("version", version)
 	)
 
 	if err := s.ensureIndexed(r.URL.Query().Get("token"), owner, project); err != nil {

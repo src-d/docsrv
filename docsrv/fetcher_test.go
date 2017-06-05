@@ -15,10 +15,10 @@ func TestReleases(t *testing.T) {
 	require := require.New(t)
 	fetcher := newReleaseFetcher("", 1)
 
-	releases, err := fetcher.releases(testOwner, testProject)
+	releases, err := fetcher.releases(testOwner, testProject, newVersion("v1.4.0"))
 	require.NoError(err)
 
-	expected := []string{"v1.0.0", "v1.4.0", "v1.5.0"}
+	expected := []string{"v1.4.0", "v1.5.0"}
 	var result []string
 	for _, r := range releases {
 		result = append(result, r.tag)
