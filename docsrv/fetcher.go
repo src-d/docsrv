@@ -54,7 +54,6 @@ func newReleaseFetcher(apiKey string, perPage int) releaseFetcher {
 func (g *githubFetcher) releases(owner, project string, minVersion *semver.Version) ([]*release, error) {
 	var result []*release
 	page := 1
-Outer:
 	for {
 		releases, resp, err := g.client.Repositories.ListReleases(
 			context.Background(),
@@ -75,7 +74,7 @@ Outer:
 
 			v := newVersion(release.tag)
 			if v != nil && v.LessThan(minVersion) {
-				break Outer
+				continue
 			}
 			result = append(result, release)
 		}
