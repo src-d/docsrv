@@ -130,12 +130,12 @@ func tarGzServer() (string, func()) {
 
 const testMakefile = `
 docs:
-	@OUTPUT=$(DESTINATION_FOLDER)/out; \
+	@OUTPUT=$(DESTINATION_PATH)/out; \
 	echo "$(BASE_URL)" >> $$OUTPUT; \
 	echo "$(REPOSITORY)" >> $$OUTPUT; \
 	echo "$(REPOSITORY_OWNER)" >> $$OUTPUT; \
 	echo "$(VERSION_NAME)" >> $$OUTPUT; \
-	echo "$(SHARED_FOLDER)" >> $$OUTPUT; \
+	echo "$(SHARED_PATH)" >> $$OUTPUT; \
 	echo "$(DOCSRV)" >> $$OUTPUT;
 `
 

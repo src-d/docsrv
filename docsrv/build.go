@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -25,6 +26,8 @@ type buildConfig struct {
 	tarballURL string
 	// baseURL is the base URL for the documentation site. e.g. foo.mydomain.tld/v1.0.0.
 	baseURL string
+	// hostName is the host name of the documentation site. e.g. foo.mydomain.tld
+	hostName string
 	// destination is the folder where the documentation should be put once
 	// is built.
 	destination string
@@ -57,17 +60,20 @@ func buildDocs(conf buildConfig) error {
 	cmd.Env = append(
 		os.Environ(),
 		"BASE_URL="+conf.baseURL,
-		"DESTINATION_FOLDER="+conf.destination,
-		"SHARED_FOLDER="+conf.sharedFolder,
-		"REPOSITORY="+conf.project,
+		"DESTINATION_PATH="+conf.destination,
+		"SHARED_PATH="+conf.sharedFolder,
+		"REPOSITORY_NAME="+conf.project,
 		"REPOSITORY_OWNER="+conf.owner,
 		"VERSION_NAME="+conf.version,
+		"HOST_NAME="+conf.hostName,
 		"DOCSRV=true",
 	)
 
+	logrus.Warnf("make docs: %#v", strings.Join(cmd.Env, " "))
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("error running `make build` of docs folder at %q: %s. Full error: %s", dir, err, string(output))
+		return fmt.Errorf("error running `make docs` of docs folder at %q: %s. Full error: %s", dir, err, string(output))
 	}
 
 	logrus.WithFields(logrus.Fields{

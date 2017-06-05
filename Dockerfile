@@ -8,8 +8,9 @@ RUN apk update \
 
 RUN mkdir -p /etc/shared \
         && mkdir -p /var/log/docsrv \
-        && mkdir -p /etc/docsrv-init \
-        && mkdir -p /var/www/public/errors
+        && mkdir -p /etc/docsrv/init.d \
+        && mkdir -p /var/www/public/errors/404 \
+        && mkdir -p /var/www/public/errors/500;
 
 COPY entrypoint.sh .
 COPY supervisord.conf /etc/supervisord.conf
