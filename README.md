@@ -12,23 +12,23 @@ This serves very specific needs, you probably just want to build your docs and p
 To access a documentation for a project, you will have to visit an URL with the following structure.
 
 ```
-http(s)://{github project name}.yourdomain.tld/{version or latest}/{path}
+http(s)://{name}.yourdomain.tld/{version or latest}/{path}
 ```
 
-The project name is taken from the subdomain of the host. (If you have more than one, let's say `foo.bar.domain.tld`, only `foo` will be used as project).
+That host will have a mapping to a GitHub project in the `config.toml` file so docsrv knows what project it must serve.
 
 ### Access list of versions for a project
 
 ```
-http(s)://{github project name}.yourdomain.tld/versions.json
+http(s)://{name}.yourdomain.tld/versions.json
 ```
 
 Will output something like this:
 
 ```json
 [
-        {"text": "v1.0.0", "url": "http://project.mydomain.tld/v1.0.0"},
-        {"text": "v1.1.0", "url": "http://project.mydomain.tld/v1.1.0"},
+        {"text": "v1.0.0", "url": "http://name.mydomain.tld/v1.0.0"},
+        {"text": "v1.1.0", "url": "http://name.mydomain.tld/v1.1.0"},
 ]
 ```
 
@@ -56,35 +56,43 @@ make build
 docker build -t docsrv .
 docker run -p 9090:9090 --name docsrv-instance \
         -e GITHUB_API_KEY="(optional) your github api key" \
-        -e GITHUB_ORG="your github org/user name" \
         -e DOCSRV_REFRESH="(optional) number of minutes between refreshes" \
         -e DEBUG_LOG="(optional) true" \
         -e REFRESH_TOKEN="(optional) your_token" \
         -v /path/to/host/logs:/var/log/docsrv \
         -v /path/to/error/pages:/var/www/public/errors \
+        -v /path/to/config/folder:/etc/docsrv/conf.d \
         -v /path/to/init/scripts:/etc/docsrv/init.d \
         docsrv
 ```
 
+* You need to add a `config.toml` file in `/etc/docsrv/conf.d`, which you can do mounting a volume in that folder.
 * The `DEBUG_LOG` env variable will output the really, really verbose messages on the log file. This is not enabled by default.
 * The `DOCSRV_REFRESH` env variable will define how many minutes will have to pass for the service to refresh the releases of a project.
 The default value is `5` minutes.
 A higher number means less chances of getting GitHub rate limit. Unauthenticated rate is 60 reqs/hour, authenticated rate is 5000 reqs/hour, so if you have a lot of projects with a lot of releases you might want to set a higher value than the default and if you have a small amount of projects with few releases but want the refresh times to be smaller use a smaller value.
-* The `GITHUB_ORG` env variable will define the default user or organisation that owns the projects served by docsrv. For example, accessing `foo.yourdomain.tld` with `bar` as `GITHUB_ORG` will download and serve documentation for `https://github.com/bar/foo`.
-* Specific hosts can have specific repositories mapped to them. You can do so by adding a mappings file at `/etc/docsrv/mappings.yml`.
 * If no `GITHUB_API_KEY` is provided, the requests will not be authenticated. That means harder rate limits (60 reqs / hour) and unability to fetch private repositories.
 * To override the error pages, mount a volume on `/var/www/public/errors` with `404/index.html` and `500/index.html`. If any of these two files does not exist, they will be created when the container starts. You may use assets contained in the same errors folder as if they were on the root of the site.
 * You can add custom init bash scripts by mounting a volume on `/etc/docsrv/init.d`. All `*.sh` files there will be executed. You can use this to install dependencies needed by your documentation build scripts. Take into account the container is an alpine linux.
 * `REFRESH_TOKEN` can be used to enable refreshes of the cache before the time specified in `REFRESH_INTERVAL`. If your documentation takes a lot to build you probably want to build it ahead of time and leave it cached for your users so they don't have to wait for it to build. This mechanism is meant to be used in a CI when you make a release. Just ping `http://project.yourdomain.tld/refresh/${VERSION}/?token=${YOUR REFRESH TOKEN}` and the cache will be refreshed and this version built.
 
-### Mappings file
+### Config file
 
-In `/etc/docsrv/mappings.yml` you can optionally put a mappings file, which will contain a map from host to GitHub repos in the following format `${OWNER}/${REPO_NAME}`.
+In `/etc/docsrv/conf.d/config.toml` you need to put the configuration for docsrv, which is a mapping between hosts and project configurations.
+
+Example `config.toml`
 
 ```
-foo.mydomain.tld: myorg/foo
-bar.mydomain.tld: otherorg/bar
+["bar.domain.tld"]
+  repository = "foo/bar"
+  min-version = "v1.1.0"
+
+["baz.anotherdomain.tld"]
+  repository = "foo/baz"
+  min-version = "v1.0.0"
 ```
+
+The project configurations available for each host are `repository`, which is the GitHub repository whose docs will be served in that host in the format `${OWNER}/${PROJECT}` and `min-version`, the minimum version of the project for which docs can be built.
 
 ### Recommended way to use and deploy docsrv
 
@@ -99,7 +107,8 @@ mydir/
     |- 500.html
     |- css/
       |- style.css
-  |- mappings.yml
+  |- conf.d/
+    |- config.toml
   |- init.d/
     |- foo.sh
     |- bar.sh

@@ -13,8 +13,11 @@ import (
 
 func TestRedirectToLatest(t *testing.T) {
 	fetcher := newMockFetcher()
-	srv := newTestSrv(fetcher)
-	srv.opts.DefaultOwner = "org"
+	srv := newTestSrv(fetcher, Config{
+		"proj1.foo.bar": ProjectConfig{
+			"org/proj1", "v0.9.0",
+		},
+	})
 
 	fetcher.add("org", "proj1", "v1.0.0", "foo")
 	fetcher.add("org", "proj1", "v0.9.0", "foo")
@@ -50,29 +53,12 @@ func TestRedirectToLatest(t *testing.T) {
 	)
 }
 
-func TestRedirectToLatest_WithMapping(t *testing.T) {
-	fetcher := newMockFetcher()
-	srv := newTestSrv(fetcher)
-	srv.opts.DefaultOwner = "org"
-	srv.opts.Mappings = Mappings{
-		"proj1.foo.bar": "org2/proj1",
-	}
-
-	fetcher.add("org", "proj1", "v1.0.0", "foo")
-	fetcher.add("org2", "proj1", "v0.9.0", "foo")
-
-	assertRedirect(
-		t, srv,
-		"http://proj1.foo.bar/latest/",
-		"http://proj1.foo.bar/v0.9.0/",
-	)
-}
-
 func TestRedirectToLatest_RefreshToken(t *testing.T) {
 	fetcher := newMockFetcher()
-	srv := newTestSrv(fetcher)
+	srv := newTestSrv(fetcher, Config{
+		"proj1.foo.bar": ProjectConfig{"org/proj1", "v1.0.0"},
+	})
 	srv.opts.RefreshToken = "foo"
-	srv.opts.DefaultOwner = "org"
 	fetcher.add("org", "proj1", "v1.0.0", "foo")
 	require.NoError(t, srv.indexProject("org", "proj1"))
 	fetcher.add("org", "proj1", "v1.1.0", "foo")
@@ -128,8 +114,9 @@ func TestPrepareVersion(t *testing.T) {
 	require.NoError(err)
 
 	fetcher := newMockFetcher()
-	srv := newTestSrv(fetcher)
-	srv.opts.DefaultOwner = "bar"
+	srv := newTestSrv(fetcher, Config{
+		"foo.bar.baz": ProjectConfig{"bar/foo", ""},
+	})
 	srv.opts.BaseFolder = tmpDir
 	srv.opts.SharedFolder = "/etc/shared"
 
@@ -163,8 +150,9 @@ func TestPrepareVersion_RefreshToken(t *testing.T) {
 	require.NoError(err)
 
 	fetcher := newMockFetcher()
-	srv := newTestSrv(fetcher)
-	srv.opts.DefaultOwner = "bar"
+	srv := newTestSrv(fetcher, Config{
+		"foo.bar.baz": ProjectConfig{"bar/foo", ""},
+	})
 	srv.opts.BaseFolder = tmpDir
 	srv.opts.SharedFolder = "/etc/shared"
 	srv.opts.RefreshToken = "refresh"
@@ -194,15 +182,15 @@ func TestPrepareVersion_RefreshToken(t *testing.T) {
 
 func TestListVersions(t *testing.T) {
 	fetcher := newMockFetcher()
-	srv := newTestSrv(fetcher)
-	srv.opts.DefaultOwner = "org"
+	srv := newTestSrv(fetcher, Config{
+		"foo.bar.baz": ProjectConfig{"org/foo", "v1.1.0"},
+	})
 	fetcher.add("org", "foo", "v1.0.0", "")
 	fetcher.add("org", "foo", "v1.1.0", "")
 	fetcher.add("org", "foo", "v1.2.0", "")
 	fetcher.add("org", "bar", "v1.3.0", "")
 
 	assertJSON(t, srv, "http://foo.bar.baz/versions.json", []*version{
-		{"v1.0.0", "http://foo.bar.baz/v1.0.0"},
 		{"v1.1.0", "http://foo.bar.baz/v1.1.0"},
 		{"v1.2.0", "http://foo.bar.baz/v1.2.0"},
 	})
@@ -211,7 +199,11 @@ func TestListVersions(t *testing.T) {
 func TestManageIndex(t *testing.T) {
 	require := require.New(t)
 	fetcher := newMockFetcher()
-	srv := newTestSrv(fetcher)
+	srv := newTestSrv(fetcher, Config{
+		"foo.bar.baz": ProjectConfig{"foo/bar", ""},
+		"baz.bar.baz": ProjectConfig{"foo/baz", ""},
+		"qux.bar.baz": ProjectConfig{"foo/qux", ""},
+	})
 	fetcher.add("foo", "bar", "v1.0.0", "")
 	fetcher.add("foo", "bar", "v1.1.0", "")
 	fetcher.add("foo", "baz", "v1.0.0", "")

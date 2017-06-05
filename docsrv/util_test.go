@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Masterminds/semver"
 	"github.com/stretchr/testify/require"
 )
 
@@ -93,15 +94,21 @@ func (m *mockFetcher) add(owner, project, version, url string) {
 	m.projectReleases[key][version] = url
 }
 
-func (m *mockFetcher) releases(owner, project string) ([]*release, error) {
+func (m *mockFetcher) releases(owner, project string, minVersion *semver.Version) ([]*release, error) {
 	key := filepath.Join(owner, project)
 	if proj, ok := m.projectReleases[key]; ok {
 		var releases []*release
 		for v, url := range proj {
-			releases = append(releases, &release{
+			release := &release{
 				tag: v,
 				url: url,
-			})
+			}
+
+			v := newVersion(release.tag)
+			if v != nil && v.LessThan(minVersion) {
+				continue
+			}
+			releases = append(releases, release)
 		}
 		sort.Sort(byTag(releases))
 		return releases, nil
@@ -110,8 +117,8 @@ func (m *mockFetcher) releases(owner, project string) ([]*release, error) {
 	return nil, nil
 }
 
-func newTestSrv(fetcher releaseFetcher) *Service {
-	srv := New(Options{})
+func newTestSrv(fetcher releaseFetcher, config Config) *Service {
+	srv := New(Options{Config: config})
 	srv.fetcher = fetcher
 	return srv
 }

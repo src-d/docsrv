@@ -21,7 +21,7 @@ type release struct {
 // releaseFetcher fetches the releases for projects.
 type releaseFetcher interface {
 	// releases returns all the releases for a project.
-	releases(owner, project string) ([]*release, error)
+	releases(owner, project string, minVersion *semver.Version) ([]*release, error)
 }
 
 type githubFetcher struct {
@@ -51,7 +51,7 @@ func newReleaseFetcher(apiKey string, perPage int) releaseFetcher {
 	return &githubFetcher{apiKey, client, perPage}
 }
 
-func (g *githubFetcher) releases(owner, project string) ([]*release, error) {
+func (g *githubFetcher) releases(owner, project string, minVersion *semver.Version) ([]*release, error) {
 	var result []*release
 	page := 1
 	for {
@@ -71,12 +71,18 @@ func (g *githubFetcher) releases(owner, project string) ([]*release, error) {
 			if release == nil {
 				continue
 			}
+
+			v := newVersion(release.tag)
+			if v != nil && v.LessThan(minVersion) {
+				continue
+			}
 			result = append(result, release)
 		}
 
 		if resp.NextPage == 0 {
 			break
 		}
+
 		page = resp.NextPage
 	}
 
@@ -120,5 +126,9 @@ func maybeStr(str *string) string {
 }
 
 func newVersion(v string) *semver.Version {
-	return semver.MustParse(v)
+	vers, err := semver.NewVersion(v)
+	if err != nil {
+		return nil
+	}
+	return vers
 }

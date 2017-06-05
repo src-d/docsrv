@@ -3,6 +3,8 @@ package docsrv
 import (
 	"strings"
 	"sync"
+
+	"github.com/Masterminds/semver"
 )
 
 type projectIndex struct {
@@ -19,16 +21,36 @@ type projectIndex struct {
 	installedMut *sync.RWMutex
 	// installed is a set of installed versions in the format ${owner}/${project}/${version}.
 	installed map[string]struct{}
+
+	minVersionsMut *sync.Mutex
+	minVersions    map[string]*semver.Version
 }
 
-func newProjectIndex() *projectIndex {
+func newProjectIndex(conf Config) *projectIndex {
+	var minVersions = make(map[string]*semver.Version)
+	for host := range conf {
+		owner, repo, ok := conf.ProjectForHost(host)
+		if !ok {
+			continue
+		}
+
+		v := conf.MinVersionForHost(host)
+		if v == nil {
+			v = new(semver.Version)
+		}
+
+		minVersions[newKey(owner, repo)] = v
+	}
+
 	return &projectIndex{
-		releasesMut:  new(sync.RWMutex),
-		releases:     make(map[string]*release),
-		projectsMut:  new(sync.RWMutex),
-		projects:     make(map[string][]*release),
-		installedMut: new(sync.RWMutex),
-		installed:    make(map[string]struct{}),
+		releasesMut:    new(sync.RWMutex),
+		releases:       make(map[string]*release),
+		projectsMut:    new(sync.RWMutex),
+		projects:       make(map[string][]*release),
+		installedMut:   new(sync.RWMutex),
+		installed:      make(map[string]struct{}),
+		minVersionsMut: new(sync.Mutex),
+		minVersions:    minVersions,
 	}
 }
 
@@ -90,6 +112,12 @@ func (p *projectIndex) install(owner, project, version string) {
 	p.installedMut.Lock()
 	defer p.installedMut.Unlock()
 	p.installed[key] = struct{}{}
+}
+
+func (p *projectIndex) minVersion(owner, project string) *semver.Version {
+	p.minVersionsMut.Lock()
+	defer p.minVersionsMut.Unlock()
+	return p.minVersions[newKey(owner, project)]
 }
 
 // newKey creates a new key for using in the index from the given set of
