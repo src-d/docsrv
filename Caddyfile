@@ -24,7 +24,6 @@
         }
 
         rewrite / {
-                if {path} not /versions.json
                 to {hostonly}{path} {hostonly}{path}/ errors/{path} /proxy{path}
         }
 

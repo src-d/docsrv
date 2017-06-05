@@ -20,8 +20,8 @@ func TestBuildDocs(t *testing.T) {
 		baseURL:      "http://foo.bar",
 		destination:  tmpDir,
 		sharedFolder: "/etc/shared",
-		project:      "src-d",
-		owner:        "docsrv",
+		project:      "docsrv",
+		owner:        "src-d",
 		version:      "v1.2.3",
 	}
 	require.NoError(buildDocs(conf))
