@@ -1,6 +1,7 @@
 package docsrv
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -12,8 +13,9 @@ const (
 )
 
 func TestReleases(t *testing.T) {
+	apiKey := os.Getenv("GITHUB_API_KEY")
 	require := require.New(t)
-	fetcher := newReleaseFetcher("", 1)
+	fetcher := newReleaseFetcher(apiKey, 1)
 
 	releases, err := fetcher.releases(testOwner, testProject, newVersion("v1.4.0"))
 	require.NoError(err)
