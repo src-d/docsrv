@@ -15,4 +15,9 @@
 bin
 public
 logs
+
 .env
+
+Makefile.main
+Makefile.docs
+Makefile.dev
