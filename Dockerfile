@@ -7,7 +7,6 @@ RUN apk update \
         && apk add --no-cache build-base
 
 RUN mkdir -p /etc/shared \
-        && mkdir -p /var/log/docsrv \
         && mkdir -p /etc/docsrv-init \
         && mkdir -p /var/www/public/errors
 
