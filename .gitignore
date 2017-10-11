@@ -15,8 +15,10 @@
 bin
 public
 logs
+.shared
 
 .env
+.local.env
 
 Makefile.main
 Makefile.docs
