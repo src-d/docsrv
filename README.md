@@ -59,7 +59,6 @@ docker run -p 9090:9090 --name docsrv-instance \
         -e DOCSRV_REFRESH="(optional) number of minutes between refreshes" \
         -e DEBUG_LOG="(optional) true" \
         -e REFRESH_TOKEN="(optional) your_token" \
-        -v /path/to/host/logs:/var/log/docsrv \
         -v /path/to/error/pages:/var/www/public/errors \
         -v /path/to/config/folder:/etc/docsrv/conf.d \
         -v /path/to/init/scripts:/etc/docsrv/init.d \
