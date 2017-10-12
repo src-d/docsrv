@@ -43,7 +43,7 @@ func assertMakefileOutput(t *testing.T, tmpDir, baseURL, project, owner, version
 	fp := filepath.Join(tmpDir, "out")
 	data, err := ioutil.ReadFile(fp)
 	require.NoError(t, err)
-	require.Equal(t, fmt.Sprintf(expectedDocsOutput, baseURL, project, owner, version), string(data))
+	require.Equal(t, fmt.Sprintf(expectedDocsOutput, baseURL, owner, project, version), string(data))
 }
 
 func assertNotFound(t *testing.T, handler http.Handler, requestURL string) {
@@ -130,12 +130,12 @@ func tarGzServer() (string, func()) {
 
 const testMakefile = `
 docs:
-	@OUTPUT=$(DESTINATION_FOLDER)/out; \
+	@OUTPUT=$(DESTINATION_PATH)/out; \
 	echo "$(BASE_URL)" >> $$OUTPUT; \
-	echo "$(REPOSITORY)" >> $$OUTPUT; \
 	echo "$(REPOSITORY_OWNER)" >> $$OUTPUT; \
+	echo "$(REPOSITORY_NAME)" >> $$OUTPUT; \
 	echo "$(VERSION_NAME)" >> $$OUTPUT; \
-	echo "$(SHARED_FOLDER)" >> $$OUTPUT; \
+	echo "$(SHARED_PATH)" >> $$OUTPUT; \
 	echo "$(DOCSRV)" >> $$OUTPUT;
 `
 

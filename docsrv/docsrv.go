@@ -265,6 +265,7 @@ func (s *Service) prepareVersion(w http.ResponseWriter, r *http.Request) {
 	conf := buildConfig{
 		tarballURL:   release.url,
 		baseURL:      urlFor(r, version, "") + "/",
+		hostName:     host,
 		destination:  destination,
 		sharedFolder: s.opts.SharedFolder,
 		version:      version,
@@ -273,6 +274,11 @@ func (s *Service) prepareVersion(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := buildDocs(conf); err != nil {
 		log.Errorf("could not build docs for project %s: %s", project, err)
+
+		if deleteErr := os.RemoveAll(destination); deleteErr != nil {
+			log.Errorf("could not remove output folder for project %s after failing its doc generation: %s", project, err)
+		}
+
 		internalError(w, r)
 		return
 	}
